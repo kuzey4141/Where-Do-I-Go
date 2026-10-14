@@ -112,7 +112,26 @@ java -jar target/where-do-i-go-0.0.1-SNAPSHOT.jar
 - `src/main/java/com/wheredoigo/common/`: API error handling.
 - `src/test/java/com/wheredoigo/`: Application startup, API, and filtering tests.
 
-## API
+## Fetch the source page
+
+To download the Ministry of Foreign Affairs visa page once, without starting the web server:
+
+```powershell
+java -jar target/where-do-i-go-0.0.1-SNAPSHOT.jar --spring.main.web-application-type=none --sources.mfa.fetch-on-startup=true
+```
+
+Build the JAR first with `./mvnw package` (or `.\mvnw.cmd package` on Windows).
+PostgreSQL must be available because this command starts the application context.
+`MfaVisaPageClient` sends an HTTP GET request and returns the response as an HTML string.
+The optional `MfaFetchRunner` saves it to `target/mfa-visa-page.html` for inspection.
+Normal application startup does not fetch the source page.
+
+The client uses a 10-second connection timeout, a 30-second request timeout,
+and follows redirects. It rejects non-200 statuses, non-HTML responses, and empty content.
+`sources.mfa.visa-url` can override the source URL for testing.
+This step does not parse visa rules or write them to the database.
+
+## API endpoints
 
 | Request | Response |
 |---|---|
