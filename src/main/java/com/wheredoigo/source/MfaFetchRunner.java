@@ -1,8 +1,5 @@
 package com.wheredoigo.source;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -23,9 +20,6 @@ public class MfaFetchRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         String html = client.fetchHtml();
-        Path output = Path.of("target", "mfa-visa-page.html");
-        Files.createDirectories(output.getParent());
-        Files.writeString(output, html, StandardCharsets.UTF_8);
-        log.info("Dışişleri sayfası indirildi: {} karakter. HTML dosyası: {}", html.length(), output);
+        log.info("Dışişleri sayfası alındı: {} karakter.", html.length());
     }
 }

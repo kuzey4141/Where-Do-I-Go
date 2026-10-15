@@ -123,13 +123,54 @@ java -jar target/where-do-i-go-0.0.1-SNAPSHOT.jar --spring.main.web-application-
 Build the JAR first with `./mvnw package` (or `.\mvnw.cmd package` on Windows).
 PostgreSQL must be available because this command starts the application context.
 `MfaVisaPageClient` sends an HTTP GET request and returns the response as an HTML string.
-The optional `MfaFetchRunner` saves it to `target/mfa-visa-page.html` for inspection.
+The optional `MfaFetchRunner` logs the received character count. HTML stays in memory
+and is not saved to a file.
 Normal application startup does not fetch the source page.
 
 The client uses a 10-second connection timeout, a 30-second request timeout,
 and follows redirects. It rejects non-200 statuses, non-HTML responses, and empty content.
 `sources.mfa.visa-url` can override the source URL for testing.
 This step does not parse visa rules or write them to the database.
+
+## Import entry rules
+
+Fetch the live page, parse it, and save the results to PostgreSQL:
+
+```powershell
+java -jar target/where-do-i-go-0.0.1-SNAPSHOT.jar --spring.main.web-application-type=none --sources.mfa.import-on-startup=true
+```
+
+Normal startup does not run the importer. HTML stays in memory throughout the import.
+No LLM or external AI service is used.
+
+`MfaVisaParser` uses Jsoup to isolate the page's content and split it at country
+headings. Names are matched to the database catalog using normalized names and
+explicit aliases. Each country explanation is then evaluated sentence by sentence
+for passport groups, visa predicates, and duration expressions. Period limits such
+as a stay within a longer time window are kept together.
+
+The parser supports straightforward visa-required, visa-free, eVisa, and visa-on-arrival
+wording. Ambiguous subjects, conflicting rules, age or official-delegation conditions,
+extra electronic authorizations, and unsupported wording remain `UNKNOWN`. This is a
+conservative rule-based parser, not a complete interpretation of travel regulations.
+The original country explanation is retained in `conditions`, including exceptions.
+The application does not infer visa rules from geography or neighboring countries.
+
+For every matched country, the importer stores four passport records. It records the
+actual configured source URL and `fetched_at`. For a recognized rule, `verified_at`
+records the UTC date of automatic source parsing and rule validation; this does not
+mean a person independently reviewed the rule. Unknown rules have no verification date.
+
+`MfaEntryRuleWriter` updates existing country/passport pairs and inserts missing ones
+in one transaction. A failed write rolls back the entire batch. A newly ambiguous
+rule replaces the older classification with `UNKNOWN`. Unmatched destinations are
+logged and are not silently mapped to another country. Existing rows for countries
+absent from a later source response are left unchanged; this importer is not a full
+deletion or historical tracking mechanism.
+
+The import refuses to write when fewer than 100 countries are matched, to avoid
+treating an error page or a major layout change as valid source data. The threshold
+can be configured with `sources.mfa.minimum-countries` for controlled tests.
 
 ## API endpoints
 
@@ -162,9 +203,11 @@ labels, and API messages remain in Turkish for the application's intended users.
 Turkey is included in the country list but has no entry rules because domestic
 travel is outside the scope of foreign entry requirements for Turkish passport holders.
 
-Actual visa information has not been loaded yet. Missing country/passport rules
-return `UNKNOWN`, with `null` values for `stayLimit`, `sourceUrl`,
-and `verifiedAt`. As a result, the `VISA_FREE` filter currently returns an empty list.
+Visa information can be loaded with the explicit import command above. Missing or
+ambiguous country/passport rules return `UNKNOWN`. Missing rules have no stay limit,
+source URL, or verification date. Imported ambiguous rules retain their source URL
+and explanation but have no verification date. The `VISA_FREE` filter returns
+recognized imported exemptions.
 `UNKNOWN` indicates unverified information; it does not imply a visa requirement
 or permission to enter without a visa.
 
@@ -176,11 +219,11 @@ Each entry rule contains the following fields:
 |---|---|
 | `country` | Destination object containing `isoCode` and a Turkish `name` |
 | `passportType` | Passport type code, such as `ORDINARY` |
-| `visaStatus` | Entry requirement classification, currently `UNKNOWN` |
-| `stayLimit` | Stay duration and any applicable period limit; currently `null` |
-| `conditions` | Additional conditions or an unverified-data message in Turkish |
-| `sourceUrl` | Source supporting the entry rule; currently `null` |
-| `verifiedAt` | Verification date; currently `null` |
+| `visaStatus` | Parsed entry requirement classification, or `UNKNOWN` |
+| `stayLimit` | Extracted stay duration and any applicable period limit, if understood |
+| `conditions` | Source explanation or a message indicating that a rule needs review, in Turkish |
+| `sourceUrl` | Source supporting an imported entry rule |
+| `verifiedAt` | Automatic rule validation date; absent for unknown rules |
 
 `GET /api/countries/DE/entry-rules` returns four records, one per passport type.
 

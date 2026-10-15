@@ -26,6 +26,10 @@ public class MfaVisaPageClient {
                 .build();
     }
 
+    public URI sourceUrl() {
+        return sourceUrl;
+    }
+
     public String fetchHtml() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(sourceUrl)
                 .timeout(Duration.ofSeconds(30))
