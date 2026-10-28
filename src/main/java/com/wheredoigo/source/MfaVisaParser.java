@@ -71,7 +71,13 @@ public class MfaVisaParser {
     private static final Pattern QUALIFIED_EXEMPTION = Pattern.compile(
             "\\b(?:bu muafiyet|bu uygulama|bu imkan|muafiyetten).*\\b(?:yalnizca|sadece|halinde|kosul|sart|yararlan|gecerli)");
     private static final Pattern VISA_VALIDITY = Pattern.compile(
-            "\\b(?:gun|ay|yil)\\p{L}*\\s+gecerli\\b(?!\\s+pasaport)|\\bvize\\p{L}*\\s+gecerlilik");
+            "\\b(?:gun|ay|yil)\\p{L}*\\s+gecerli\\b(?!\\s+pasaport)|\\bvize\\p{L}*\\s+gecerli(?:lik|lig)");
+    private static final Pattern PERMITTED_STAY = Pattern.compile(
+            "\\b(?:ikamet|kalis)\\s+sure|\\bkalma|\\bkalabil");
+    private static final Pattern VISA_VALIDITY_SPAN = Pattern.compile(
+            "\\b(?:e-)?vize\\p{L}*\\s+ge[çc]erli(?:lik|li[ğg])\\p{L}*[^.;!?]*?"
+                    + "\\b" + NUMBER + "\\s*(?:g[üu]n(?:d[üu]r)?|ay(?:d[ıi]r)?|y[ıi]l(?:d[ıi]r)?)\\b",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern NORMAL_ENTRY = Pattern.compile("\\bgiris|\\bcikis|\\bturistik|\\bturizm");
 
     public ParseResult parse(String html, List<Country> countries) {
@@ -258,7 +264,8 @@ public class MfaVisaParser {
                     || normalized.contains("turkiye cumhuriyeti vatandaslari");
             for (PassportType type : PassportType.values()) {
                 List<Candidate> choices = candidates.getOrDefault(type, List.of());
-                boolean requiresVisa = choices.stream().anyMatch(item -> item.status() == VisaStatus.VISA_REQUIRED)
+                boolean requiresVisa = choices.stream().anyMatch(item -> item.status() == VisaStatus.VISA_REQUIRED
+                        || item.status() == VisaStatus.E_VISA || item.status() == VisaStatus.VISA_ON_ARRIVAL)
                         && choices.stream().noneMatch(item -> item.status() == VisaStatus.VISA_FREE);
                 if (candidate.status() == VisaStatus.VISA_FREE && citizenSubject) {
                     // Specific passport durations take precedence over a general tourist limit.
@@ -306,6 +313,9 @@ public class MfaVisaParser {
             if (status == VisaStatus.UNKNOWN && choices.isEmpty() && routeCondition) status = VisaStatus.CONDITIONAL;
             if (qualifiedExemptions.contains(type) && status == VisaStatus.VISA_FREE) status = VisaStatus.CONDITIONAL;
             String stayLimit = understood && durations.size() == 1 ? durations.iterator().next() : null;
+            if (status == VisaStatus.CONDITIONAL && stayLimit != null) {
+                stayLimit = "Koşulu sağlayanlar için: " + stayLimit;
+            }
             String conditions = status == VisaStatus.UNKNOWN
                     ? "Otomatik ayrıştırma kesin sonuç üretemedi. Kaynak açıklaması: " + text : text;
             if (status == VisaStatus.UNKNOWN && choices.isEmpty() && !ambiguous.contains(type)) {
@@ -354,7 +364,11 @@ public class MfaVisaParser {
             complex = COMPLEX.matcher(eligibility).find();
         }
         if (NEGATED.matcher(normalized).find()) return null;
-        if (complex && explicitCondition) return new Candidate(VisaStatus.CONDITIONAL, null);
+        if (complex && explicitCondition) {
+            String conditionalStay = FREE.matcher(normalized).find() || PERMITTED_STAY.matcher(normalized).find()
+                    ? stayLimit(initial) : null;
+            return new Candidate(VisaStatus.CONDITIONAL, conditionalStay);
+        }
         if ((!general && (firstPassport < 0 || !SUBJECT.matcher(subject).matches())) || complex) {
             return null;
         }
@@ -376,7 +390,8 @@ public class MfaVisaParser {
             return null;
         }
         // A visa's validity is not necessarily its permitted stay.
-        String stay = status == VisaStatus.VISA_REQUIRED || VISA_VALIDITY.matcher(normalized).find()
+        boolean explicitStay = PERMITTED_STAY.matcher(normalized).find();
+        String stay = (status == VisaStatus.VISA_REQUIRED || VISA_VALIDITY.matcher(normalized).find()) && !explicitStay
                 ? null : stayLimit(initial);
         return new Candidate(status, stay);
     }
@@ -389,6 +404,8 @@ public class MfaVisaParser {
     private String stayLimit(String sentence) {
         sentence = sentence.replaceFirst("(?iu),?\\s*(?:bu süre|başvuru üzerine|basvuru uzerine).*uzat[ıi]l.*$", "");
         Matcher duration = DURATION.matcher(sentence);
+        List<int[]> visaValiditySpans = VISA_VALIDITY_SPAN.matcher(sentence).results()
+                .map(match -> new int[] {match.start(), match.end()}).toList();
         int start = -1;
         int end = -1;
         int count = 0;
@@ -396,7 +413,9 @@ public class MfaVisaParser {
             // Document validity is independent of the permitted stay in the destination.
             String following = normalize(sentence.substring(duration.end()));
             String preceding = normalize(sentence.substring(0, duration.start()));
-            if (following.matches("^gecerli\\s+pasaport.*")
+            int durationStart = duration.start();
+            if (following.startsWith("gecerli")
+                    || visaValiditySpans.stream().anyMatch(span -> durationStart >= span[0] && durationStart < span[1])
                     || (preceding.contains("pasaport gecerlilik suresi") && following.startsWith("olan "))) {
                 continue;
             }

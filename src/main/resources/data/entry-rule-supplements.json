@@ -1,5 +1,71 @@
 [
   {
+    "countryIsoCodes": ["VN"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "E_VISA",
+    "status": "E_VISA",
+    "stayLimit": "Onaylanan e-vizedeki giriş ve çıkış tarihlerine bağlı olarak en fazla 90 gün",
+    "sourceUrl": "https://vietnam.travel/plan-your-trip/official-vietnam-evisa-application",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "elektronik vizelerini",
+    "note": "Vietnam Ulusal Turizm İdaresinin resmî e-vize rehberi, tüm ülke vatandaşları için 90 güne kadar e-vize seçeneğini açıklar. Gerçek izin süresini onaylanan e-vizedeki tarihler belirler; her başvurana otomatik 90 günlük kalış verilmez. Diplomatik, hizmet ve hususi pasaportların ayrı muafiyeti değiştirilmez."
+  },
+  {
+    "countryIsoCodes": ["AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IS", "IT", "LI", "LT", "LU", "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "VISA_REQUIRED",
+    "status": "VISA_REQUIRED",
+    "stayLimit": "Kısa süreli Schengen vizesiyle: her 180 günde en fazla 90 gün; vizedeki daha kısa izin süresi esas alınır",
+    "sourceUrl": "https://home-affairs.ec.europa.eu/policies/schengen/border-crossing/short-stay-calculator_en",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeye tabidir",
+    "note": "Avrupa Komisyonu kısa kalışlar için Schengen alanının tamamında 90/180 üst sınırını açıklar. Bu bilgi vize muafiyeti değildir; vize etiketindeki daha kısa kalış süresi aşılmaz. Uzun süreli D tipi vizeler ve oturum izinleri bu hesaplamaya dahil değildir."
+  },
+  {
+    "countryIsoCodes": ["AM"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "E_VISA",
+    "status": "E_VISA",
+    "stayLimit": "Seçilen ziyaretçi e-vizesine göre 21 veya 120 güne kadar; onaylanan süre geçerlidir",
+    "sourceUrl": "https://evisa.mfa.am/purpose-and-duration",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "elektronik vize",
+    "note": "Ermenistan'ın resmî e-vize sistemi 21 ve 120 güne kadar kalış sağlayan iki ziyaretçi vizesi sunar. Bunlar ayrı başvuru seçenekleridir; herkese otomatik 120 gün verilmez. Diğer pasaportlara ilişkin Dışişleri açıklamasındaki 21 günlük kural değiştirilmez."
+  },
+  {
+    "countryIsoCodes": ["NP"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "VISA_ON_ARRIVAL",
+    "status": "VISA_ON_ARRIVAL",
+    "stayLimit": "Turistik vizede seçilen ve onaylanan süreye göre 15, 30 veya 90 gün",
+    "sourceUrl": "https://immigration.gov.np/visa-information",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "sınır kapılarında alabilmektedirler",
+    "note": "Nepal Göç Dairesi varışta turist vizesi için 15, 30 ve 90 günlük seçenekler bildirir. Süre girişten itibaren sayılır. Başvuru makbuzunun geçerliliği kalış süresi değildir; uzatma ayrıca göç idaresinin onayını gerektirir."
+  },
+  {
+    "countryIsoCodes": ["MG"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "VISA_ON_ARRIVAL",
+    "status": "VISA_ON_ARRIVAL",
+    "stayLimit": "Turistik ziyarette ilk vize en fazla 60 gün; onaylanan daha kısa süre geçerlidir",
+    "sourceUrl": "https://evisamada-mg.com/en/home",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "sınır kapılarında alabilmektedirler",
+    "note": "Madagaskar Turizm Bakanlığının https://www.mta.gov.mg/informations-pratiques/ sayfasından yönlendirdiği resmî e-vize portalı, turist vizesi için 60 günlük üst sınır ve varışta başvuru imkânı bildirir. Göç idaresinin ayrıca verebileceği uzatma ilk vize süresine dahil edilmez; resmî görev vizeleri bu turist sınırıyla genellenmez."
+  },
+  {
+    "countryIsoCodes": ["KM"],
+    "passportTypes": ["ORDINARY", "SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_ON_ARRIVAL",
+    "status": "VISA_ON_ARRIVAL",
+    "stayLimit": "Turistik vizeyle en fazla 45 gün; diğer vize türleri farklıdır",
+    "sourceUrl": "https://justice.gouv.km/texte/loi-n88-025-relative-aux-conditions-de-sejour-des-etrangers-aux-comores/",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "sınır kapılarında alabilmektedirler",
+    "note": "Komorlar Adalet Bakanlığının yayımladığı 88-025 sayılı kanunun 2. maddesi turist vizesi için en fazla 45 gün belirtir. Transit vizesinin beş günlük ve diğer kısa kalış vizelerinin üç aylık sınırları turist vizesiyle karıştırılmaz."
+  },
+  {
     "countryIsoCodes": ["GR", "LI", "LT", "MT"],
     "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
     "expectedStatus": "VISA_FREE",

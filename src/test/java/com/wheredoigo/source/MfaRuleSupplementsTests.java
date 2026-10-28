@@ -88,6 +88,29 @@ class MfaRuleSupplementsTests {
         assertTrue(result.conditions().contains("uzatma otomatik değildir"));
     }
 
+    @Test
+    void schengenUpperBoundDoesNotGrantVisaFreeAccessOrChangeAnotherCountry() {
+        var germany = entry("DE", PassportType.ORDINARY, VisaStatus.VISA_REQUIRED, null, "Umuma mahsus pasaport hamilleri vizeye tabidir.");
+        var india = entry("IN", PassportType.ORDINARY, VisaStatus.VISA_REQUIRED, null, "Umuma mahsus pasaport hamilleri vizeye tabidir.");
+        var results = supplements.apply(List.of(germany, india), checkedOn);
+        assertEquals(VisaStatus.VISA_REQUIRED, results.get(0).visaStatus());
+        assertTrue(results.get(0).stayLimit().contains("her 180 günde en fazla 90 gün"));
+        assertTrue(results.get(0).stayLimit().contains("daha kısa izin süresi"));
+        assertSame(india, results.get(1));
+        assertNull(results.get(1).stayLimit());
+    }
+
+    @Test
+    void visaOptionsRemainOptionsRatherThanAnAutomaticMaximumStay() {
+        var armenia = entry("AM", PassportType.ORDINARY, VisaStatus.E_VISA, null, "elektronik vize");
+        var nepal = entry("NP", PassportType.ORDINARY, VisaStatus.VISA_ON_ARRIVAL, null, "sınır kapılarında alabilmektedirler");
+        var results = supplements.apply(List.of(armenia, nepal), checkedOn);
+        assertTrue(results.get(0).stayLimit().contains("21 veya 120"));
+        assertTrue(results.get(0).stayLimit().contains("onaylanan süre"));
+        assertTrue(results.get(1).stayLimit().contains("15, 30 veya 90"));
+        assertTrue(results.get(1).stayLimit().contains("seçilen ve onaylanan"));
+    }
+
     private EntryRule entry(String iso, PassportType passport, VisaStatus status, String stay, String conditions) {
         return new EntryRule(new Country(iso, "Test Ülkesi"), passport, status, stay, conditions,
                 MfaVisaPageClient.SOURCE_URL, status == VisaStatus.UNKNOWN ? null : checkedOn);

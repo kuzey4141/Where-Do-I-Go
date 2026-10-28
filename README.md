@@ -206,6 +206,15 @@ extensions remain in the explanation rather than increasing the initial stay lim
 Dated changes are not applied before their published start date. This remains a
 rule-based parser, not a complete interpretation of travel regulations.
 
+A stay limit can also describe a verified visa option or upper bound: for example,
+Nepal's 15/30/90-day tourist options or the Schengen short-stay 90/180 ceiling.
+These are labelled with their visa category and retain any shorter duration granted
+on the actual visa. Conditional exemptions retain a published duration only for
+people meeting the stated conditions. Visa validity (such as Russia's 120-day
+application/entry window) is kept separate from permitted stay (30 days). A missing
+duration remains null when no applicable fixed limit can be established; a number
+from another passport or visa category is never substituted.
+
 `src/main/resources/data/entry-rule-supplements.json` contains dated official evidence
 for missing information, including short-stay limits and Kenya's passport-specific
 eTA rules. These are reviewed reference records, not live downloads of the linked

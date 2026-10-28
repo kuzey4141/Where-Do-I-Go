@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,7 +64,7 @@ class MfaVisaParserTests {
         var result = parse("15 yaşından küçük umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "15-50 yaş arasındaki umuma mahsus pasaport hamilleri vizeye tabidir.");
         assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
-        assertEquals(null, rule(result, "AA", PassportType.ORDINARY).stayLimit());
+        assertEquals("Koşulu sağlayanlar için: 30 gün", rule(result, "AA", PassportType.ORDINARY).stayLimit());
     }
 
     @ParameterizedTest
@@ -519,6 +520,52 @@ class MfaVisaParserTests {
                 + "Bu muafiyet umuma mahsus pasaport hamilleri için sadece geçerli Schengen vizesine sahip olmaları halinde geçerlidir.");
         assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
         assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+    }
+
+    @Test
+    void extractsAnExplicitStayEvenWhenVisaObtainingMethodsAreAlternatives() {
+        var result = parse("Umuma mahsus ve resmi pasaport hamilleri vizelerini elektronik olarak veya "
+                + "varışta 365 günde 90 gün kalış süreli olarak alabilmektedirler.");
+        for (var entry : result.rules()) {
+            assertEquals(VisaStatus.VISA_REQUIRED, entry.visaStatus());
+            assertEquals("365 günde 90 gün", entry.stayLimit());
+        }
+    }
+
+    @Test
+    void separatesVisaValidityFromAnExplicitPermittedStayInTheSameSentence() {
+        var result = parse("Umuma mahsus pasaport hamilleri elektronik vize alabilmektedirler. "
+                + "E-vizenin geçerliliği veriliş tarihinden itibaren 120 gündür ve yabancının giriş tarihinden "
+                + "itibaren ülkede en fazla 30 gün kalmasına izin verir.");
+        var entry = rule(result, "AA", PassportType.ORDINARY);
+        assertEquals(VisaStatus.E_VISA, entry.visaStatus());
+        assertEquals("30 gün", entry.stayLimit());
+    }
+
+    @Test
+    void doesNotPresentVisaValidityAsStayWhenTheActualStayIsUnspecified() {
+        var result = parse("Umuma mahsus pasaport hamilleri elektronik vize alabilmektedirler. "
+                + "E-vizenin geçerliliği veriliş tarihinden itibaren 120 gündür.");
+        assertNull(rule(result, "AA", PassportType.ORDINARY).stayLimit());
+    }
+
+    @Test
+    void excludesAPrecedingVisaValidityAndPreservesTheActualStayLimit() {
+        var result = parse("Umuma mahsus pasaport hamilleri 30 gün geçerli elektronik vize alabilmektedirler; "
+                + "kalış süresi 14 gündür.");
+        assertEquals("14 gündür", rule(result, "AA", PassportType.ORDINARY).stayLimit());
+    }
+
+    @Test
+    void aDelegationOnlyDurationIsNotCopiedToTheOrdinaryPassport() {
+        var result = parse("Umuma mahsus pasaport hamilleri vizeye tabidir. "
+                + "Resmi heyet mensubu olan diplomatik, hizmet ve hususi pasaport hamilleri "
+                + "180 gün içinde 90 gün vizeden muaftır. "
+                + "Resmi heyet mensubu olmayan diplomatik, hizmet ve hususi pasaport hamilleri vizeye tabidir.");
+        assertNull(rule(result, "AA", PassportType.ORDINARY).stayLimit());
+        var special = rule(result, "AA", PassportType.SPECIAL);
+        assertEquals(VisaStatus.CONDITIONAL, special.visaStatus());
+        assertEquals("Koşulu sağlayanlar için: 180 gün içinde 90 gün", special.stayLimit());
     }
 
     private MfaVisaParser.ParseResult parse(String explanation) {
