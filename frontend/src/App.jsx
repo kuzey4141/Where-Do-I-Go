@@ -26,6 +26,44 @@ function normalize(value) {
   return value.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/\p{Diacritic}/gu, '').replaceAll('ı', 'i')
 }
 
+const NUMBER_WORDS = {
+  sifir: 0, bir: 1, iki: 2, uc: 3, dort: 4, bes: 5, alti: 6, yedi: 7, sekiz: 8, dokuz: 9,
+  on: 10, yirmi: 20, otuz: 30, kirk: 40, elli: 50, altmis: 60, yetmis: 70, seksen: 80, doksan: 90,
+  yuz: 100, bin: 1000,
+}
+const NUMBER_WORD = '(?:s[ıi]f[ıi]r|bir|iki|[üu][çc]|d[öo]rt|be[şs]|alt[ıi]|yedi|sekiz|dokuz|on|yirmi|otuz|k[ıi]rk|elli|altm[ıi][şs]|yetmi[şs]|seksen|doksan|y[üu]z|bin)'
+const WRITTEN_DURATION = new RegExp(
+  `(?<!\\p{L})(${NUMBER_WORD}(?:\\s+${NUMBER_WORD})*)(?:\\s*\\((\\d+)\\))?\\s+`
+  + '(g[üu]n(?:l[üu]k|de|e|[üu]|d[üu]r)?|hafta(?:l[ıi]k|ya|y[ıi]|da|d[ıi]r)?|ay(?:l[ıi]k|da|[ıi]|a|d[ıi]r)?|y[ıi]l(?:l[ıi]k|da|[ıi]|a|d[ıi]r)?)(?!\\p{L})',
+  'giu',
+)
+const PLAIN_DURATION_UNITS = {
+  gunu: 'gün', gundur: 'gün', ayi: 'ay', aydir: 'ay', yili: 'yıl', yildir: 'yıl',
+  haftayi: 'hafta', haftadir: 'hafta', gunluk: 'gün', aylik: 'ay', yillik: 'yıl', haftalik: 'hafta',
+}
+
+function formatStayLimit(value) {
+  if (!value) return null
+  return value.replace(WRITTEN_DURATION, (original, words, parenthesized, unit) => {
+    let total = 0
+    let group = 0
+    for (const word of normalize(words).split(' ')) {
+      const number = NUMBER_WORDS[word]
+      if (number === 1000) { total += (group || 1) * 1000; group = 0 }
+      else if (number === 100) group = (group || 1) * 100
+      else group += number
+    }
+    const number = total + group
+    // Keep conflicting source spellings visible instead of choosing a different duration.
+    if (parenthesized && Number(parenthesized) !== number) return original
+    return `${number} ${unit}`
+  })
+    .replace(/(\d+)\s+(günü|gündür|ayı|aydır|yılı|yıldır|haftayı|haftadır)(?!\p{L})/giu,
+      (_, number, unit) => `${number} ${PLAIN_DURATION_UNITS[normalize(unit)]}`)
+    .replace(/(\d+)\s+(günlük|aylık|yıllık|haftalık)\s*$/giu,
+      (_, number, unit) => `${number} ${PLAIN_DURATION_UNITS[normalize(unit)]}`)
+}
+
 async function getJson(path, signal) {
   const response = await fetch(path, { signal, headers: { Accept: 'application/json' } })
   if (!response.ok) throw new Error('Bilgiler şu anda alınamıyor.')
@@ -97,6 +135,7 @@ function CountryPanel({ country, visible, passport, data, onClose, onRetry }) {
   const info = STATUSES[rule?.visaStatus] || STATUSES.UNKNOWN
   const source = safeSource(rule?.sourceUrl)
   const date = dateLabel(rule?.verifiedAt)
+  const stay = formatStayLimit(rule?.stayLimit)
   return <aside className={'country-panel' + (visible ? ' is-visible' : '')}
     aria-label={country.name + ' ülke bilgileri'} aria-hidden={!visible} inert={!visible}>
     <div className="panel-topline">
@@ -127,8 +166,8 @@ function CountryPanel({ country, visible, passport, data, onClose, onRetry }) {
             </div>
             <div className="stay-card">
               <div className="stay-label"><span className="eyebrow">KALIŞ SÜRESİ</span><span className="tiny-cross">+</span></div>
-              <p className={'stay-value' + ((rule?.stayLimit?.length || 0) > 60 ? ' is-long' : '')}>{rule?.stayLimit || 'Belirtilmemiş'}</p>
-              {!rule?.stayLimit && <span className="stay-note">Süresiz kalış anlamına gelmez.</span>}
+              <p className={'stay-value' + ((stay?.length || 0) > 60 ? ' is-long' : '')}>{stay || 'Belirtilmemiş'}</p>
+              {!stay && <span className="stay-note">Süresiz kalış anlamına gelmez.</span>}
             </div>
             {rule?.conditions && <div className="conditions">
               <h2>Koşullar ve notlar</h2>

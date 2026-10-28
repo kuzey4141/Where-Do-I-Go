@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
@@ -74,10 +75,20 @@ public class MfaVisaParser {
             "\\b(?:gun|ay|yil)\\p{L}*\\s+gecerli\\b(?!\\s+pasaport)|\\bvize\\p{L}*\\s+gecerli(?:lik|lig)");
     private static final Pattern PERMITTED_STAY = Pattern.compile(
             "\\b(?:ikamet|kalis)\\s+sure|\\bkalma|\\bkalabil");
-    private static final Pattern VISA_VALIDITY_SPAN = Pattern.compile(
-            "\\b(?:e-)?vize\\p{L}*\\s+ge[çc]erli(?:lik|li[ğg])\\p{L}*[^.;!?]*?"
-                    + "\\b" + NUMBER + "\\s*(?:g[üu]n(?:d[üu]r)?|ay(?:d[ıi]r)?|y[ıi]l(?:d[ıi]r)?)\\b",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern DOCUMENT_VALIDITY_LABEL = Pattern.compile(
+            "\\b(?:(?:e-)?vize\\p{L}*|pasaport\\p{L}*|(?:ikamet|oturum|calisma)\\s+izn\\p{L}*)"
+                    + "\\s+gecerli(?:lik|lig)\\p{L}*");
+    private static final Pattern DOCUMENT_AFTER_DURATION = Pattern.compile(
+            "^(?:sureli\\s+)?(?:pasaport\\p{L}*|(?:ikamet|oturum|calisma)\\s+izn\\p{L}*)\\b");
+    private static final Pattern STAY_BEFORE_DURATION = Pattern.compile(
+            "\\b(?:kalis|ikamet)\\s+sure\\p{L}*(?:\\s+(?:her|en|fazla|azami|ilk|toplam|toplamda|olarak))*[\\s:=\"“”]*$");
+    private static final Pattern STAY_AFTER_DURATION = Pattern.compile(
+            "^[\\s\"'“”‘’():-]*(?:(?:sureyle\\s+)?vizeden muaf|(?:ikamet|kalis)\\s+sure|kalma\\p{L}*|kalabil\\p{L}*|kalinabil\\p{L}*)");
+    private static final Pattern PROCESSING_BEFORE_DURATION = Pattern.compile(
+            "\\b(?:basvuru|islem|degerlendirme|sonuclanma)\\p{L}*"
+                    + "(?:\\s+(?:sure\\p{L}*|ortalama|yaklasik|en|fazla|azami|genellikle))*[\\s:=]*$");
+    private static final Pattern PROCESSING_AFTER_DURATION = Pattern.compile(
+            "^(?:(?:icinde|icerisinde)\\s+)?(?:sonuclan|degerlendir|isleme alin|yanitlan)");
     private static final Pattern NORMAL_ENTRY = Pattern.compile("\\bgiris|\\bcikis|\\bturistik|\\bturizm");
 
     public ParseResult parse(String html, List<Country> countries) {
@@ -365,8 +376,9 @@ public class MfaVisaParser {
         }
         if (NEGATED.matcher(normalized).find()) return null;
         if (complex && explicitCondition) {
-            String conditionalStay = FREE.matcher(normalized).find() || PERMITTED_STAY.matcher(normalized).find()
-                    ? stayLimit(initial) : null;
+            boolean exemption = FREE.matcher(normalized).find();
+            String conditionalStay = exemption || PERMITTED_STAY.matcher(normalized).find()
+                    ? stayLimit(initial, !exemption) : null;
             return new Candidate(VisaStatus.CONDITIONAL, conditionalStay);
         }
         if ((!general && (firstPassport < 0 || !SUBJECT.matcher(subject).matches())) || complex) {
@@ -390,9 +402,8 @@ public class MfaVisaParser {
             return null;
         }
         // A visa's validity is not necessarily its permitted stay.
-        boolean explicitStay = PERMITTED_STAY.matcher(normalized).find();
-        String stay = (status == VisaStatus.VISA_REQUIRED || VISA_VALIDITY.matcher(normalized).find()) && !explicitStay
-                ? null : stayLimit(initial);
+        boolean needsExplicitStay = status == VisaStatus.VISA_REQUIRED || VISA_VALIDITY.matcher(normalized).find();
+        String stay = stayLimit(initial, needsExplicitStay);
         return new Candidate(status, stay);
     }
 
@@ -402,23 +413,63 @@ public class MfaVisaParser {
     }
 
     private String stayLimit(String sentence) {
+        return stayLimit(sentence, false);
+    }
+
+    private String stayLimit(String sentence, boolean needsExplicitStay) {
         sentence = sentence.replaceFirst("(?iu),?\\s*(?:bu süre|başvuru üzerine|basvuru uzerine).*uzat[ıi]l.*$", "");
-        Matcher duration = DURATION.matcher(sentence);
-        List<int[]> visaValiditySpans = VISA_VALIDITY_SPAN.matcher(sentence).results()
-                .map(match -> new int[] {match.start(), match.end()}).toList();
+        List<MatchResult> durations = DURATION.matcher(sentence).results().toList();
+        boolean[] explicit = new boolean[durations.size()];
+        boolean[] unrelated = new boolean[durations.size()];
+        boolean[] documentContext = new boolean[durations.size()];
+        for (int i = 0; i < durations.size(); i++) {
+            MatchResult duration = durations.get(i);
+            int previousEnd = i == 0 ? 0 : durations.get(i - 1).end();
+            int nextStart = i + 1 == durations.size() ? sentence.length() : durations.get(i + 1).start();
+            String before = normalize(sentence.substring(previousEnd, duration.start()));
+            before = before.substring(Math.max(before.lastIndexOf(';'), before.lastIndexOf(',')) + 1).strip();
+            String after = normalize(sentence.substring(duration.end(), nextStart));
+            explicit[i] = STAY_BEFORE_DURATION.matcher(before).find() || STAY_AFTER_DURATION.matcher(after).find();
+            unrelated[i] = after.startsWith("gecerli") || DOCUMENT_AFTER_DURATION.matcher(after).find()
+                    || (!explicit[i] && (PROCESSING_BEFORE_DURATION.matcher(before).find()
+                        || PROCESSING_AFTER_DURATION.matcher(after).find()));
+            String prefix = normalize(sentence.substring(0, duration.start()));
+            Matcher documentLabel = DOCUMENT_VALIDITY_LABEL.matcher(prefix);
+            int labelEnd = -1;
+            while (documentLabel.find()) labelEnd = documentLabel.end();
+            // "Pasaport geçerlilik süresi 6 ay olan ..." closes the document condition
+            // before a later, independent stay entitlement for that passport holder.
+            documentContext[i] = labelEnd >= 0 && !Pattern.compile("\\b(?:olan|hamili|sahip)\\b")
+                    .matcher(prefix.substring(labelEnd)).find();
+        }
+        // Keep a bounded reference period with the stay it qualifies, even if only
+        // one end has an explicit label: "kalış süresi her 180 günde 90 gün".
+        for (int pass = 0; pass < durations.size(); pass++) {
+            for (int i = 0; i + 1 < durations.size(); i++) {
+                String between = normalize(sentence.substring(durations.get(i).end(), durations.get(i + 1).start()));
+                String first = normalize(durations.get(i).group());
+                boolean referencePeriod = between.matches("(?:icinde|icerisinde|zarfinda)")
+                        || (between.isEmpty() && first.matches(".*\\b(?:gunde|haftada|ayda|yilda)$"))
+                        || between.matches("(?:asmamak|gecmemek)\\s+(?:kaydiyla|sartiyla|kosuluyla)\\s+her ziyarette");
+                if (referencePeriod && !unrelated[i] && !unrelated[i + 1] && (explicit[i] || explicit[i + 1])) {
+                    explicit[i] = true;
+                    explicit[i + 1] = true;
+                }
+            }
+        }
         int start = -1;
         int end = -1;
         int count = 0;
-        while (duration.find()) {
-            // Document validity is independent of the permitted stay in the destination.
-            String following = normalize(sentence.substring(duration.end()));
-            String preceding = normalize(sentence.substring(0, duration.start()));
-            int durationStart = duration.start();
-            if (following.startsWith("gecerli")
-                    || visaValiditySpans.stream().anyMatch(span -> durationStart >= span[0] && durationStart < span[1])
-                    || (preceding.contains("pasaport gecerlilik suresi") && following.startsWith("olan "))) {
+        boolean skippedAfterStay = false;
+        for (int i = 0; i < durations.size(); i++) {
+            MatchResult duration = durations.get(i);
+            if (unrelated[i] || ((needsExplicitStay || documentContext[i]) && !explicit[i])) {
+                if (start >= 0) skippedAfterStay = true;
                 continue;
             }
+            // Do not reintroduce discarded document/processing periods by returning
+            // a substring that spans them between two unrelated stay expressions.
+            if (skippedAfterStay) return null;
             if (start < 0) {
                 start = duration.start();
             }
