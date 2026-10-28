@@ -20,6 +20,7 @@ public class MfaImportService {
     private final TravelCatalogRepository catalog;
     private final MfaEntryRuleWriter writer;
     private final int minimumCountries;
+    private final MfaRuleSupplements supplements = new MfaRuleSupplements();
 
     public MfaImportService(MfaVisaPageClient client, MfaVisaParser parser,
             TravelCatalogRepository catalog, MfaEntryRuleWriter writer,
@@ -40,9 +41,10 @@ public class MfaImportService {
                     + ". Veritabanına yazılmadı.");
         }
         LocalDate checkedAt = fetchedAt.atZone(ZoneOffset.UTC).toLocalDate();
-        List<EntryRule> rules = parsed.rules().stream().map(rule -> new EntryRule(
+        List<EntryRule> parsedRules = parsed.rules().stream().map(rule -> new EntryRule(
                 rule.country(), rule.passportType(), rule.visaStatus(), rule.stayLimit(), rule.conditions(),
                 client.sourceUrl().toString(), rule.visaStatus() == VisaStatus.UNKNOWN ? null : checkedAt)).toList();
+        List<EntryRule> rules = supplements.apply(parsedRules, checkedAt);
         writer.save(rules, fetchedAt);
         Map<VisaStatus, Long> counts = rules.stream()
                 .collect(Collectors.groupingBy(EntryRule::visaStatus, Collectors.counting()));

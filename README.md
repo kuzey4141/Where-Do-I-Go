@@ -191,17 +191,39 @@ explicit aliases. Each country explanation is then evaluated sentence by sentenc
 for passport groups, visa predicates, and duration expressions. Period limits such
 as a stay within a longer time window are kept together.
 
-The parser supports straightforward visa-required, visa-free, eVisa, and visa-on-arrival
-wording. Ambiguous subjects, conflicting rules, age or official-delegation conditions,
-extra electronic authorizations, and unsupported wording remain `UNKNOWN`. This is a
-conservative rule-based parser, not a complete interpretation of travel regulations.
-The original country explanation is retained in `conditions`, including exceptions.
-The application does not infer visa rules from geography or neighboring countries.
+The parser supports visa-required, visa-free, eVisa, and visa-on-arrival wording.
+Explicit age, official-duty and cross-border itinerary conditions use `CONDITIONAL`
+when no separate general rule is stated. Unresolved contradictions, missing passport
+subjects and unsupported wording remain `UNKNOWN`. A general visa-obtaining method
+only refines passport types already requiring a visa; it does not erase another
+passport's exemption. Alternative electronic/arrival routes retain `VISA_REQUIRED`
+rather than arbitrarily selecting one method. Conditions retain the available routes.
+
+Travel authorizations, arrival forms and insurance do not by themselves change the
+visa regime; their requirements remain in `conditions`, with a visible note for
+visa-free rules. Passport validity is not counted as permitted stay. Approval-dependent
+extensions remain in the explanation rather than increasing the initial stay limit.
+Dated changes are not applied before their published start date. This remains a
+rule-based parser, not a complete interpretation of travel regulations.
+
+`src/main/resources/data/entry-rule-supplements.json` contains dated official evidence
+for missing information, including short-stay limits and Kenya's passport-specific
+eTA rules. These are reviewed reference records, not live downloads of the linked
+secondary pages. Each record includes its source, check date, affected passport types
+and a source-text guard. It only fills an empty duration or a matching unresolved
+status; an explicit new MFA duration/status takes precedence. Palau's official source
+also clarifies that its 30-day permission is an arrival visa. Supplements expire for
+new imports after 90 days and must then be checked against their official sources.
+They never add a country to the catalog. No schema migration is needed for these data
+corrections.
 
 For every matched country, the importer stores four passport records. It records the
 actual configured source URL and `fetched_at`. For a recognized rule, `verified_at`
 records the UTC date of automatic source parsing and rule validation; this does not
-mean a person independently reviewed the rule. Unknown rules have no verification date.
+mean a person independently reviewed the rule. A supplemented record instead retains
+the evidence's original check date and links its actual official source; importing
+again does not advance that check date. `fetched_at` records the main MFA import's
+fetch time. Unknown rules have no verification date.
 
 `MfaEntryRuleWriter` updates existing country/passport pairs and inserts missing ones
 in one transaction. A failed write rolls back the entire batch. A newly ambiguous
@@ -237,6 +259,22 @@ Missing or invalid parameters return `400`; unknown country codes return `404`.
 Errors use `application/problem+json`. Filters with no matches return `200` and `[]`.
 
 ### Data status
+
+The existing local catalog after the 28 October 2026 correction contains 201
+countries/territories (including Türkiye), with all 800 foreign country/passport
+records and all country summaries present. `UNKNOWN` fell from 134 to 6 records:
+three official-passport records each for Gibraltar and the Marshall Islands. Their
+passport-specific rules could not be established from the available official text.
+
+Thirty of the original 38 visa-free records with missing stay limits now have
+source-backed durations. Eight of those original records still lack a verified
+duration: Kiribati (diplomatic), South Sudan (diplomatic), Somalia and Yemen (three
+official passport types each). Recovered formerly-unknown rules reveal seven more
+missing limits in Syria and Zimbabwe, so the current total is 15. These stay null;
+no default 30/90-day limit or unlimited-stay claim is substituted. Source pages can
+also disagree: Somalia's main MFA paragraph and its separate travel page should not
+be combined into an invented duration. These counts describe this local DB snapshot,
+not independently certified travel eligibility.
 
 Data is stored in PostgreSQL and queried through Spring JDBC. The country
 and territory list is seeded from the JDK ISO catalog. Country names, passport

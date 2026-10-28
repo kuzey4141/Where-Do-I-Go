@@ -1,0 +1,123 @@
+[
+  {
+    "countryIsoCodes": ["GR", "LI", "LT", "MT"],
+    "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "Her 180 günlük dönemde en fazla 90 gün; Schengen alanındaki kalışların toplamı",
+    "sourceUrl": "https://home-affairs.ec.europa.eu/policies/schengen/visa-policy/applying-schengen-visa_en",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Pasaport muafiyeti Dışişleri açıklamasından, kısa kalışın 90/180 sınırı Avrupa Komisyonu açıklamasından alınmıştır. Bu süre her ülke için ayrı hesaplanmaz; çalışma veya uzun süreli ikamet hakkı vermez."
+  },
+  {
+    "countryIsoCodes": ["AG"],
+    "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "En fazla 6 ay; girişte verilen izin süresi geçerlidir",
+    "sourceUrl": "https://immigration.gov.ag/visa-services/general-visa-information/",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Antigua ve Barbuda Göç İdaresi, vize gerektirmeyen ziyaretçiler için en fazla altı aylık ziyaret sınırı bildirir. Dönüş veya devam bileti, konaklama ve yeterli maddi imkân koşulları vardır."
+  },
+  {
+    "countryIsoCodes": ["BS"],
+    "passportTypes": ["ORDINARY", "SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "En fazla 8 ay; girişte verilen izin süresi geçerlidir",
+    "sourceUrl": "https://www.immigration.gov.bs/wp-content/uploads/2016/05/VISA-REQUIREMENTS-FOR-FOREIGNERS-TRAVELLING-TO-THE-BAHAMAS.pdf",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Bahamalar Göç İdaresinin tablosunda Türkiye satırında vize gerekmeyen ziyaret süresi sekiz ay olarak belirtilir. Bu bir üst sınırdır; sınır makamının verdiği kalış izni esas alınır."
+  },
+  {
+    "countryIsoCodes": ["LC"],
+    "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "En fazla 6 hafta",
+    "sourceUrl": "https://www.stlucia.gov.lc/visiting-saint-lucia",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Saint Lucia Dışişleri Dairesi ziyaretçilere girişte en fazla altı haftalık kalış verildiğini ve dönüş bileti gerektiğini belirtir. Pasaport muafiyeti ayrıca Dışişleri ülke açıklamasında yer alır."
+  },
+  {
+    "countryIsoCodes": ["PK"],
+    "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "Bir yıl içinde en fazla 90 gün",
+    "sourceUrl": "https://www.mfa.gov.tr/pakistan-seyahat-edecek-turk-vatandaslarinin-dikkatine.tr.mfa",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Dışişleri'nin Pakistan seyahat sayfası diplomatik, hizmet ve hususi Türk pasaportları için bir yıllık dönemde 90 günlük muafiyet sınırını açıklar."
+  },
+  {
+    "countryIsoCodes": ["PW"],
+    "passportTypes": ["ORDINARY", "SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_ON_ARRIVAL",
+    "stayLimit": "Girişte 30 gün; uzatma ayrıca onaya tabidir",
+    "sourceUrl": "https://pristineparadisepalau.com/travelers-tips/",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Palau Visitors Authority ziyaretçilere varışta 30 günlük turist vizesi verildiğini belirtir. Önceden vize gerekmemesi sınırsız kalış anlamına gelmez; uzatma otomatik değildir. Dönüş veya devam bileti ve Palau giriş formu gerekir."
+  },
+  {
+    "countryIsoCodes": ["UZ"],
+    "passportTypes": ["DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "30 güne kadar",
+    "sourceUrl": "https://www.mfa.gov.tr/ozbekistan-seyahat-edecek-turk-vatandaslarinin-dikkatine.tr.mfa",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Dışişleri'nin Özbekistan seyahat sayfası resmî ve umuma mahsus Türk pasaportları için 30 günlük sınır bildirir. Varıştan itibaren üç gün içinde ikamet kaydı yaptırılması gerekir."
+  },
+  {
+    "countryIsoCodes": ["SC"],
+    "passportTypes": ["ORDINARY", "SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "İlk ziyaretçi izni en fazla 3 ay; uzatma ayrıca onaya tabidir",
+    "sourceUrl": "https://ics.gov.sc/permits/visitors-permit",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "seyahat yetkilendirme",
+    "note": "Seyşeller Göç ve Medeni Hâl Dairesi ilk ziyaretçi izni için üç aylık üst sınır bildirir. Vize muafiyetine rağmen seyahatten önce elektronik seyahat yetkilendirmesi alınması, konaklama ve dönüş veya devam bileti sunulması gerekir."
+  },
+  {
+    "countryIsoCodes": ["MX"],
+    "passportTypes": ["DIPLOMATIC"],
+    "expectedStatus": "VISA_FREE",
+    "status": "VISA_FREE",
+    "stayLimit": "90 güne kadar",
+    "sourceUrl": "https://consulmex.sre.gob.mx/reinounido/index.php/es/contenido/80-diplomatic-and-official-visas-",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "vizeden muaftır",
+    "note": "Meksika'nın resmî konsolosluk tablosunda Türkiye satırında yalnız diplomatik pasaport için 90 günlük muafiyet yer alır. Bu süre hususi ve hizmet pasaportlarına uygulanmaz."
+  },
+  {
+    "countryIsoCodes": ["KE"],
+    "passportTypes": ["SPECIAL", "SERVICE", "DIPLOMATIC"],
+    "expectedStatus": "UNKNOWN",
+    "status": "VISA_FREE",
+    "stayLimit": "90 güne kadar",
+    "sourceUrl": "https://etakenya.go.ke/general-information",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "eTA sisteminden muaftır",
+    "note": "Kenya'nın resmî eTA portalındaki muafiyet listesi, Türk diplomatik, resmî, hususi ve hizmet pasaportlarını ve aynı tür geçerli pasaport taşıyan aile üyelerini 90 güne kadar sayar. Bu süre eTA belgesinin geçerliliği değildir."
+  },
+  {
+    "countryIsoCodes": ["KE"],
+    "passportTypes": ["ORDINARY"],
+    "expectedStatus": "UNKNOWN",
+    "status": "CONDITIONAL",
+    "stayLimit": null,
+    "sourceUrl": "https://immigration.go.ke/travelers-obligations/",
+    "checkedOn": "2026-10-28",
+    "requiredSourceText": "zorunlu seyahat sigortası",
+    "note": "Bordo pasaportla seyahatten önce eTA başvurusu ve Dışişleri açıklamasındaki zorunlu sigorta koşulu bulunur. eTA seyahat iznidir; nihai giriş veya sabit bir kalış süresi garantisi değildir. Kalış, girişte verilen ziyaretçi izninin koşullarına bağlıdır."
+  }
+]

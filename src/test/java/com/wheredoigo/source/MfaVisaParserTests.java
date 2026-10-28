@@ -5,6 +5,9 @@ import com.wheredoigo.entryrule.EntryRule;
 import com.wheredoigo.entryrule.VisaStatus;
 import com.wheredoigo.passport.PassportType;
 import java.util.List;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -51,7 +54,7 @@ class MfaVisaParserTests {
                 + "Resmi heyet mensubu olan diplomatik, hizmet ve hususi pasaport hamilleri vizeden muaftır. "
                 + "Resmi heyet mensubu olmayan diplomatik, hizmet ve hususi pasaport hamilleri vizeye tabidir.");
         assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.ORDINARY).visaStatus());
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.SPECIAL).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.SPECIAL).visaStatus());
         assertTrue(rule(result, "AA", PassportType.SPECIAL).conditions().contains("heyet"));
     }
 
@@ -59,7 +62,8 @@ class MfaVisaParserTests {
     void doesNotTurnAgeRestrictionsIntoUnconditionalVisaFreeAccess() {
         var result = parse("15 yaşından küçük umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "15-50 yaş arasındaki umuma mahsus pasaport hamilleri vizeye tabidir.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(null, rule(result, "AA", PassportType.ORDINARY).stayLimit());
     }
 
     @ParameterizedTest
@@ -75,7 +79,7 @@ class MfaVisaParserTests {
     @Test
     void doesNotTurnOfficialVisitExemptionsIntoTouristExemptions() {
         var result = parse("Hizmet pasaportu hamilleri resmi ziyaretlerinde vizeden muaftır.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.SERVICE).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.SERVICE).visaStatus());
     }
 
     @Test
@@ -85,10 +89,11 @@ class MfaVisaParserTests {
     }
 
     @Test
-    void doesNotDiscardAdditionalTravelAuthorizationRequirements() {
+    void preservesVisaExemptionAndAdditionalTravelAuthorizationRequirements() {
         var result = parse("Umuma mahsus, hususi, hizmet ve diplomatik pasaport hamilleri 90 gün vizeden muaftır. "
                 + "Vatandaşlarımızın elektronik seyahat yetkilendirmesi alması gerekmektedir.");
-        assertTrue(result.rules().stream().allMatch(rule -> rule.visaStatus() == VisaStatus.UNKNOWN));
+        assertTrue(result.rules().stream().allMatch(rule -> rule.visaStatus() == VisaStatus.VISA_FREE));
+        assertTrue(result.rules().stream().allMatch(rule -> rule.conditions().contains("seyahat yetkilendirmesi")));
     }
 
     @Test
@@ -149,14 +154,15 @@ class MfaVisaParserTests {
     @Test
     void doesNotChooseBetweenElectronicAndArrivalAlternatives() {
         var result = parse("Umuma mahsus pasaport hamilleri elektronik vize veya sınır kapılarında vize alabilmektedirler.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertTrue(rule(result, "AA", PassportType.ORDINARY).conditions().contains("veya sınır kapılarında"));
     }
 
     @Test
     void recognizesAnElectronicAlternativeEvenWhenTheVisaNounIsShared() {
         var result = parse("Umuma mahsus pasaport hamilleri vizeye tabidir. "
                 + "Umuma mahsus pasaport hamilleri vizelerini varışta veya elektronik olarak alabilmektedirler.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.ORDINARY).visaStatus());
     }
 
     @Test
@@ -168,12 +174,13 @@ class MfaVisaParserTests {
     }
 
     @Test
-    void anUnscopedElectronicVisaMethodCannotBeAssignedToAllPassportTypes() {
+    void aGeneralVisaMethodOnlyRefinesPassportsAlreadyRequiringAVisa() {
         var result = parse("Umuma mahsus pasaport hamilleri vizeye tabidir. "
                 + "Diplomatik pasaport hamilleri 30 gün vizeden muaftır. "
                 + "Vatandaşlarımız alacakları e-vizeyle seyahat edilebilmektedirler.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+        assertEquals(VisaStatus.E_VISA, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.SPECIAL).visaStatus());
     }
 
     @Test
@@ -186,7 +193,7 @@ class MfaVisaParserTests {
     @Test
     void priorApprovalIsNotPresentedAsUnconditionalArrivalAccess() {
         var result = parse("Umuma mahsus pasaport hamilleri ön onay alıp bu başvuruyla birlikte sınır kapılarında vize alabilmektedirler.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
     }
 
     @Test
@@ -234,12 +241,13 @@ class MfaVisaParserTests {
     }
 
     @Test
-    void keepsInitialStayAndConditionalExtensionTogether() {
+    void keepsTheInitialStaySeparateFromAnApprovalDependentExtension() {
         var result = parse("Umuma mahsus, hususi, hizmet ve diplomatik pasaport hamilleri vizeden muaftır. "
                 + "Ülkeye ilk girişte 30 gün kalış imkanı sağlanmakta, başvuru üzerine onay alınması halinde kalış süresi 90 güne kadar uzatılabilmektedir.");
         for (var entry : result.rules()) {
             assertEquals(VisaStatus.VISA_FREE, entry.visaStatus());
-            assertEquals("30 gün kalış imkanı sağlanmakta, başvuru üzerine onay alınması halinde kalış süresi 90 güne kadar", entry.stayLimit());
+            assertEquals("30 gün", entry.stayLimit());
+            assertTrue(entry.conditions().contains("90 güne kadar uzatılabilmektedir"));
         }
     }
 
@@ -291,21 +299,22 @@ class MfaVisaParserTests {
     void anUnscopedEligibilityRestrictionStillBlocksUnconditionalExemption() {
         var result = parse("Umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "Bu muafiyet sadece başka bir ülkenin geçerli vizesine sahip olanlar için geçerlidir.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
     }
 
     @Test
     void aTransitRestrictionOnAnExemptionIsNotDiscardedAsAnUnrelatedTransitRule() {
         var result = parse("Umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "Bu muafiyet yalnızca transit yolcular için geçerlidir.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
     }
 
     @Test
     void aMandatoryArrivalFormIsNotSilentlyDiscarded() {
         var result = parse("Umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "Vatandaşlarımız seyahat öncesinde varış formunu doldurmalıdır.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertTrue(rule(result, "AA", PassportType.ORDINARY).conditions().contains("varış formunu doldurmalıdır"));
     }
 
     @Test
@@ -313,8 +322,9 @@ class MfaVisaParserTests {
         var result = parse("Umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
                 + "Diplomatik pasaport hamilleri 90 gün vizeden muaftır. "
                 + "Umuma mahsus pasaport hamilleri elektronik seyahat yetkilendirmesi almalıdır.");
-        assertEquals(VisaStatus.UNKNOWN, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.ORDINARY).visaStatus());
         assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+        assertTrue(rule(result, "AA", PassportType.ORDINARY).conditions().contains("yetkilendirmesi almalıdır"));
     }
 
     @Test
@@ -376,6 +386,139 @@ class MfaVisaParserTests {
         assertThrows(IllegalArgumentException.class, () -> parser.parse("""
                 <div class="mfa-content-box"><b>Test Ülkesi:</b> X <b>Test Ülkesi:</b> Y</div>
                 """, List.of(country)));
+    }
+
+    @Test
+    void documentValidityPrefixDoesNotBecomeThePermittedStay() {
+        var result = parse("Pasaport geçerlilik süresi en az 6 ay olan umuma mahsus pasaport hamilleri "
+                + "90 güne kadar turistik seyahatlerinde vizeden muaftır.");
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals("90 güne kadar", rule(result, "AA", PassportType.ORDINARY).stayLimit());
+    }
+
+    @Test
+    void anOptionalParenthesizedExtensionDoesNotInvalidateTheInitialExemption() {
+        var result = parse("Resmi ve umuma mahsus pasaport hamilleri 180 gün içinde 30 gün vizeden muaftır "
+                + "(30 günlük muafiyet zamanında başvurulması halinde 90 güne kadar uzatılabilmektedir).");
+        assertTrue(result.rules().stream().allMatch(entry -> entry.visaStatus() == VisaStatus.VISA_FREE));
+        assertTrue(result.rules().stream().allMatch(entry -> "180 gün içinde 30 gün".equals(entry.stayLimit())));
+        assertTrue(result.rules().stream().allMatch(entry -> entry.conditions().contains("uzatılabilmektedir")));
+    }
+
+    @Test
+    void anOfficialAssignmentExceptionDoesNotEraseAnExplicitShortVisitExemption() {
+        var result = parse("Diplomatik, hizmet ve hususi pasaport hamilleri 180 gün içinde 90 gün vizeden muaftır. "
+                + "Ülkede göreve atanan diplomatik, hizmet ve hususi pasaport hamilleri görevleri müddetince vizeden muaftır.");
+        for (var type : List.of(PassportType.SPECIAL, PassportType.SERVICE, PassportType.DIPLOMATIC)) {
+            assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", type).visaStatus());
+            assertEquals("180 gün içinde 90 gün", rule(result, "AA", type).stayLimit());
+        }
+    }
+
+    @Test
+    void anOfficialVisitExceptionDoesNotEraseTheGeneralVisaRequirement() {
+        var result = parse("Hizmet ve hususi pasaport hamilleri vizeye tabidir. "
+                + "Bakan heyetine dahil olarak resmi ziyarette bulunan hizmet ve hususi pasaport hamilleri vizeden muaftır.");
+        assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.SPECIAL).visaStatus());
+        assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.SERVICE).visaStatus());
+    }
+
+    @Test
+    void insuranceAndItsExemptionsArePreservedWithoutChangingTheVisaRegime() {
+        var result = parse("Umuma mahsus ve resmi pasaport hamilleri bir yıla kadar vizeden muaftır. "
+                + "Umuma mahsus pasaport hamilleri zorunlu seyahat sigortası yaptırmalıdır. "
+                + "Diplomatik, hizmet ve hususi pasaport hamilleri sigortadan muaftır.");
+        assertTrue(result.rules().stream().allMatch(entry -> entry.visaStatus() == VisaStatus.VISA_FREE));
+        assertTrue(result.rules().stream().allMatch(entry -> "bir yıla kadar".equals(entry.stayLimit())));
+        assertTrue(result.rules().stream().allMatch(entry -> entry.conditions().contains("sigortası yaptırmalıdır")));
+    }
+
+    @Test
+    void positiveMuafOlmaklaBirlikteIsNotMatchedAsANegation() {
+        var result = parse("Vatandaşlarımız pasaport türünden bağımsız olarak vizeden muaf olmakla birlikte, "
+                + "seyahatlerinden önce seyahat yetkilendirme başvurusu yapmalıdır.");
+        assertTrue(result.rules().stream().allMatch(entry -> entry.visaStatus() == VisaStatus.VISA_FREE));
+    }
+
+    @Test
+    void diplomaticMissionMentionsDoNotExpandThePassportSubject() {
+        var result = parse("Diplomatik pasaport hamilleri 90 gün vizeden muaftır. "
+                + "Umuma mahsus pasaport hamilleri vizeye tabidir. "
+                + "Umuma mahsus pasaport hamilleri vizelerini diplomatik temsilciliklerimizden alabilmektedirler.");
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+        assertEquals("90 gün", rule(result, "AA", PassportType.DIPLOMATIC).stayLimit());
+        assertEquals(VisaStatus.VISA_REQUIRED, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+    }
+
+    @Test
+    void beforeArrivalDoesNotMeanVisaOnArrival() {
+        var result = parse("Umuma mahsus pasaport hamilleri vizelerini varıştan önce elektronik olarak alabilmektedirler.");
+        assertEquals(VisaStatus.E_VISA, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+    }
+
+    @Test
+    void airportTransitDoesNotImplyVisaOnArrival() {
+        var result = parse("Umuma mahsus ve resmi pasaport hamilleri vizeye tabidir. "
+                + "Havalimanlarından üçüncü ülkelere transit geçmek isteyen umuma mahsus pasaport hamilleri turistik vize almalıdır.");
+        assertTrue(result.rules().stream().allMatch(entry -> entry.visaStatus() == VisaStatus.VISA_REQUIRED));
+    }
+
+    @Test
+    void aGeneralArrivalMethodPreservesTheOtherPassportsExemption() {
+        var result = parse("Umuma mahsus pasaport hamilleri vizeye tabidir. "
+                + "Resmi pasaport hamilleri 90 gün vizeden muaftır. "
+                + "Vatandaşlarımız sınır kapılarında 30 gün süreli vize alabilmektedirler.");
+        assertEquals(VisaStatus.VISA_ON_ARRIVAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals("30 gün", rule(result, "AA", PassportType.ORDINARY).stayLimit());
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
+        assertEquals("90 gün", rule(result, "AA", PassportType.DIPLOMATIC).stayLimit());
+    }
+
+    @Test
+    void aGeneralTouristLimitOnlyFillsMissingSpecificDurations() {
+        var result = parse("Diplomatik pasaport hamilleri her 180 günde 90 gün vizeden muaftır. "
+                + "Umuma mahsus, hizmet ve hususi pasaport hamilleri vizeden muaftır. "
+                + "Vatandaşlarımız turistik seyahatlerinde 30 güne kadar vizeden muaf olup, "
+                + "bu süre başvuruyla 90 güne kadar uzatılabilmektedir.");
+        assertEquals("180 günde 90 gün", rule(result, "AA", PassportType.DIPLOMATIC).stayLimit());
+        assertEquals("30 güne kadar", rule(result, "AA", PassportType.ORDINARY).stayLimit());
+    }
+
+    @Test
+    void aPublishedStartDateAndInflectedDayUnitAreUnderstood() {
+        String sentence = "15 Eylül 2026 tarihinden itibaren geçerli olmak üzere umuma mahsus pasaport "
+                + "hamillerinin turistik seyahatlerinde vize muafiyeti süresi 30 gündür.";
+        var before = new MfaVisaParser(Clock.fixed(Instant.parse("2026-09-14T12:00:00Z"), ZoneOffset.UTC));
+        var after = new MfaVisaParser(Clock.fixed(Instant.parse("2026-10-28T12:00:00Z"), ZoneOffset.UTC));
+        String html = "<div class='mfa-content-box'><b>Test Ülkesi:</b>" + sentence + "</div>";
+        assertEquals(VisaStatus.UNKNOWN, rule(before.parse(html, List.of(country)), "AA", PassportType.ORDINARY).visaStatus());
+        var ordinary = rule(after.parse(html, List.of(country)), "AA", PassportType.ORDINARY);
+        assertEquals(VisaStatus.VISA_FREE, ordinary.visaStatus());
+        assertEquals("30 gündür", ordinary.stayLimit());
+    }
+
+    @Test
+    void anExplicitCrossBorderVisaRequirementIsAConditionRatherThanAnUnparsedParagraph() {
+        var result = parse("Vatandaşlarımız ülkeye komşu ülke üzerinden seyahat edebilir. "
+                + "Bu güzergâhtan geçmek için vatandaşlarımızın Schengen vizesi alması gerekmektedir.");
+        assertTrue(result.rules().stream().allMatch(entry -> entry.visaStatus() == VisaStatus.CONDITIONAL));
+        assertTrue(result.rules().stream().allMatch(entry -> entry.stayLimit() == null));
+    }
+
+    @Test
+    void anUnspecifiedDurationIsNeverCopiedFromAnotherPassportType() {
+        var result = parse("Umuma mahsus pasaport hamilleri 90 gün vizeden muaftır. "
+                + "Diplomatik, hizmet ve hususi pasaport hamilleri vizeden muaftır.");
+        assertEquals(null, rule(result, "AA", PassportType.DIPLOMATIC).stayLimit());
+    }
+
+    @Test
+    void aScopedRestrictionOnAnExistingExemptionCannotBeTreatedAsAnOptionalException() {
+        var result = parse("Umuma mahsus pasaport hamilleri 30 gün vizeden muaftır. "
+                + "Diplomatik pasaport hamilleri 90 gün vizeden muaftır. "
+                + "Bu muafiyet umuma mahsus pasaport hamilleri için sadece geçerli Schengen vizesine sahip olmaları halinde geçerlidir.");
+        assertEquals(VisaStatus.CONDITIONAL, rule(result, "AA", PassportType.ORDINARY).visaStatus());
+        assertEquals(VisaStatus.VISA_FREE, rule(result, "AA", PassportType.DIPLOMATIC).visaStatus());
     }
 
     private MfaVisaParser.ParseResult parse(String explanation) {

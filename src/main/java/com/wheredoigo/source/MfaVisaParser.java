@@ -5,6 +5,11 @@ import com.wheredoigo.entryrule.EntryRule;
 import com.wheredoigo.entryrule.VisaStatus;
 import com.wheredoigo.passport.PassportType;
 import java.text.Normalizer;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -27,33 +32,42 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class MfaVisaParser {
-    private static final Pattern FREE = Pattern.compile("vizeden muaf|vize muafiyeti uygulan");
+    private final Clock clock;
+    private static final DateTimeFormatter TURKISH_DATE = new DateTimeFormatterBuilder()
+            .parseCaseInsensitive().appendPattern("d MMMM uuuu").toFormatter(Locale.forLanguageTag("tr"));
+    private static final Pattern EFFECTIVE_FROM = Pattern.compile(
+            "^(\\d{1,2}\\s+\\p{L}+\\s+\\d{4})\\s+tarihinden itibaren geçerli olmak üzere", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    public MfaVisaParser() { this(Clock.systemUTC()); }
+
+    MfaVisaParser(Clock clock) { this.clock = clock; }
+    private static final Pattern FREE = Pattern.compile("vizeden muaf|vize muafiyeti (?:uygulan|suresi)");
     private static final Pattern REQUIRED = Pattern.compile("vizeye tabi");
     // Match the original text: normalization can change offsets (e.g. decomposed accents).
     private static final String NUMBER = "(?:\\d+|bir|iki|[üu][çc]|d[öo]rt|be[şs]|alt[ıi]|yedi|sekiz|dokuz|on|otuz|altm[ıi][şs]|doksan)";
     private static final Pattern DURATION = Pattern.compile(
             "\\b" + NUMBER + "(?:\\s+" + NUMBER + ")?(?:\\s*\\([^)]*\\))?\\s*"
-                    + "(?:g[üu]n(?:l[üu]k|de|e|[üu])?|hafta(?:l[ıi]k|ya|y[ıi])?|ay(?:l[ıi]k|da|[ıi]|a)?|y[ıi]l(?:l[ıi]k|da|[ıi]|a)?)\\b(?:\\s+kadar)?",
+                    + "(?:g[üu]n(?:l[üu]k|de|e|[üu]|d[üu]r)?|hafta(?:l[ıi]k|ya|y[ıi])?|ay(?:l[ıi]k|da|[ıi]|a)?|y[ıi]l(?:l[ıi]k|da|[ıi]|a)?)\\b(?:\\s+kadar)?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern SUBJECT = Pattern.compile(
             "^(?:(?:umuma mahsus|hususi|hizmet|diplomatik|resmi|mahsus|pasaport(?:u|lari)?|ve)\\b[\\s,()]*)+$");
     private static final Pattern COMPLEX = Pattern.compile(
             "\\byas|\\bheyet|\\bgorev|\\bsart|\\bkosul|\\bhalinde|\\bolan\\b|\\bolmayan\\b|"
             + "\\bbiyometrik|\\bikamet izni|\\bvize\\p{L}*\\s+(?:hamili|sahibi|sahip)|"
-            + "\\bgecerli.*\\bvize(?:si|sine|sinin|siyle|leri|lerini|lerine|leriyle|yle)?\\b|\\bseyahat yetkilendirme|"
-            + "\\beta\\b|\\bk-eta\\b|\\bsigorta|\\baskiya|\\bistisna|\\bancak\\b|"
-            + "\\bdegil|\\bgecerlilik|\\buygulanmam|\\bmuaf tutulmam|\\bmuaf olm|"
+            + "\\bgecerli\\s+(?:(?:schengen|abd|ab|birlesik krallik|irlanda|kanada|avustralya)\\s+)*vize(?:si|sine|sinin|siyle|leri|lerini|lerine|leriyle|yle)?\\b|"
+            + "\\baskiya|\\bistisna|\\bancak\\b|"
+            + "\\bdegil|\\bgecerlilik|\\buygulanmam|\\bmuaf tutulmam|\\bmuaf olm(?:ayan|ad|az|am|uyor)|"
             + "\\bresmi ziyaret|\\bresmi seyahat|\\byalnizca|\\bsadece|\\bbasvuruyla birlikte|\\bon onay|\\bonceden onay");
     private static final Map<String, String> ALIASES = aliases();
-    private static final Pattern ELECTRONIC = Pattern.compile("\\be-vize|\\belektronik vize|\\belektronik olarak");
-    private static final Pattern ARRIVAL = Pattern.compile("\\bsinir kapilar|\\bvaris(?:ta|inda|larinda)|\\bhava(?:liman|alan)\\p{L}*|\\bulkeye giris(?:te|inde|lerinde)");
+    private static final Pattern ELECTRONIC = Pattern.compile("\\be-vize|\\belektronik vize|\\belektronik olarak|\\beta\\.gov\\.lk");
+    private static final Pattern ARRIVAL = Pattern.compile("\\bsinir kapilar|\\bvaris(?:ta|inda|larinda)\\b|\\bhava(?:liman|alan)\\p{L}*(?:inda|nda)\\b|\\bulkeye giris(?:te|inde|lerinde)\\b");
     private static final Pattern OBTAIN_VISA = Pattern.compile(
-            "\\bvize\\p{L}*.*\\b(?:alabil|alinabil|alinmak|veril|tatbik|almalar|almasi|alarak)|"
+            "\\bvize\\p{L}*.*\\b(?:alabil|alinabil|alinmak|veril|tatbik|almalar|almasi|alarak|ita edil)|"
                     + "(?:\\be-vize|\\belektronik vize).*\\b(?:seyahat edebil|seyahat edilebil|girebil)");
     private static final Pattern EXTRA_REQUIREMENT = Pattern.compile(
             "\\b(?:eta|k-eta)\\b|\\b(?:sigorta|yetkilendirme|askiya)\\p{L}*|\\b(?:form|kart).*\\b(?:doldur|basvur)");
     private static final Pattern NEGATED = Pattern.compile(
-            "\\bdegil|\\buygulanmam|\\bmuaf tutulmam|\\bmuaf olm|\\bsona er|\\bkaldiril|\\bverilmem|\\balinam|\\bverilme.*\\bmumkun degil");
+            "\\bdegil|\\buygulanmam|\\bmuaf tutulmam|\\bmuaf olm(?:ayan|ad|az|am|uyor)|\\bsona er|\\bkaldiril|\\bverilmem|\\balinam|\\bverilme.*\\bmumkun degil");
     private static final Pattern QUALIFIED_EXEMPTION = Pattern.compile(
             "\\b(?:bu muafiyet|bu uygulama|bu imkan|muafiyetten).*\\b(?:yalnizca|sadece|halinde|kosul|sart|yararlan|gecerli)");
     private static final Pattern VISA_VALIDITY = Pattern.compile(
@@ -162,10 +176,22 @@ public class MfaVisaParser {
     private List<EntryRule> parseCountry(Country country, String text) {
         Map<PassportType, List<Candidate>> candidates = new EnumMap<>(PassportType.class);
         Set<PassportType> ambiguous = EnumSet.noneOf(PassportType.class);
+        List<String> generalPolicies = new ArrayList<>();
+        Set<VisaStatus> discontinued = EnumSet.noneOf(VisaStatus.class);
+        Set<PassportType> qualifiedExemptions = EnumSet.noneOf(PassportType.class);
         Set<PassportType> previousTypes = Set.of();
         // A missing full stop between two explicit passport rules occurs in the source.
         String separated = text.replaceAll("(?iu)(tabidir)\\s+(?=(?:diplomatik|hususi|hizmet|umuma)\\b)", "$1. ");
         for (String sentence : separated.split("(?<=[.!?])\\s+")) {
+            Matcher effective = EFFECTIVE_FROM.matcher(sentence);
+            if (effective.find()) {
+                try {
+                    if (LocalDate.parse(effective.group(1), TURKISH_DATE).isAfter(LocalDate.now(clock))) continue;
+                } catch (DateTimeParseException exception) {
+                    // A dated rule with an unreadable start date cannot establish today's entitlement.
+                    continue;
+                }
+            }
             String normalized = normalize(sentence);
             Set<PassportType> types = passportTypes(normalized);
             if ((transitOnly(normalized) && !QUALIFIED_EXEMPTION.matcher(normalized).find())
@@ -173,8 +199,19 @@ public class MfaVisaParser {
                     && !EXTRA_REQUIREMENT.matcher(normalized).find())) {
                 continue;
             }
-            if (EXTRA_REQUIREMENT.matcher(normalized).find()) {
+            if (normalized.contains("askiya")) {
                 ambiguous.addAll(types.isEmpty() ? EnumSet.allOf(PassportType.class) : types);
+                continue;
+            }
+            if (QUALIFIED_EXEMPTION.matcher(normalized).find()
+                    && (normalized.contains("muafiyet") || normalized.contains("bu uygulama"))) {
+                qualifiedExemptions.addAll(types.isEmpty() ? EnumSet.allOf(PassportType.class) : types);
+                continue;
+            }
+            if (types.isEmpty() && NEGATED.matcher(normalized).find()
+                    && (ARRIVAL.matcher(normalized).find() || ELECTRONIC.matcher(normalized).find())) {
+                if (ARRIVAL.matcher(normalized).find()) discontinued.add(VisaStatus.VISA_ON_ARRIVAL);
+                if (ELECTRONIC.matcher(normalized).find()) discontinued.add(VisaStatus.E_VISA);
                 continue;
             }
             boolean policyMention = FREE.matcher(normalized).find() || REQUIRED.matcher(normalized).find()
@@ -200,8 +237,7 @@ public class MfaVisaParser {
                 continue;
             }
             if (types.isEmpty()) {
-                // An unscoped policy may qualify any earlier passport-specific sentence.
-                ambiguous.addAll(EnumSet.allOf(PassportType.class));
+                generalPolicies.add(sentence);
                 continue;
             }
             Candidate candidate = classify(sentence, normalized);
@@ -212,41 +248,114 @@ public class MfaVisaParser {
                 types.forEach(type -> candidates.computeIfAbsent(type, key -> new ArrayList<>()).add(candidate));
             }
         }
+        // A general visa-obtaining method refines the passports that need a visa.
+        // It must not erase a separately stated exemption for another passport.
+        for (String sentence : generalPolicies) {
+            String normalized = normalize(sentence);
+            Candidate candidate = classify(sentence, normalized, true);
+            if (candidate == null) continue;
+            boolean citizenSubject = normalized.contains("vatandaslarimiz")
+                    || normalized.contains("turkiye cumhuriyeti vatandaslari");
+            for (PassportType type : PassportType.values()) {
+                List<Candidate> choices = candidates.getOrDefault(type, List.of());
+                boolean requiresVisa = choices.stream().anyMatch(item -> item.status() == VisaStatus.VISA_REQUIRED)
+                        && choices.stream().noneMatch(item -> item.status() == VisaStatus.VISA_FREE);
+                if (candidate.status() == VisaStatus.VISA_FREE && citizenSubject) {
+                    // Specific passport durations take precedence over a general tourist limit.
+                    if (choices.isEmpty() || choices.stream().allMatch(item ->
+                            item.status() == VisaStatus.VISA_FREE && item.stayLimit() == null)) {
+                        candidates.put(type, new ArrayList<>(List.of(candidate)));
+                    }
+                } else if (requiresVisa && (candidate.status() == VisaStatus.E_VISA
+                        || candidate.status() == VisaStatus.VISA_ON_ARRIVAL)) {
+                    candidates.computeIfAbsent(type, key -> new ArrayList<>()).add(candidate);
+                }
+            }
+        }
         List<EntryRule> result = new ArrayList<>();
+        String explanation = normalize(text);
+        boolean routeCondition = passportTypes(explanation).isEmpty() && explanation.contains("vatandaslar")
+                && explanation.contains("uzerinden") && explanation.contains("vize")
+                && explanation.contains("gerekmektedir");
         for (PassportType type : PassportType.values()) {
-            List<Candidate> choices = candidates.getOrDefault(type, List.of());
+            List<Candidate> choices = candidates.getOrDefault(type, List.of()).stream()
+                    .filter(choice -> !discontinued.contains(choice.status())).toList();
+            // Age, official-duty and foreign-visa exceptions are known conditions,
+            // not an unconditional exemption. Preserve a separately stated general rule.
+            boolean hasGeneralRule = choices.stream().anyMatch(choice -> choice.status() != VisaStatus.CONDITIONAL);
+            if (hasGeneralRule) choices = choices.stream().filter(choice -> choice.status() != VisaStatus.CONDITIONAL).toList();
             Set<VisaStatus> statuses = new HashSet<>();
             Set<String> durations = new HashSet<>();
-            choices.forEach(choice -> {
+            for (Candidate choice : choices) {
                 statuses.add(choice.status());
                 if (choice.stayLimit() != null) {
                     durations.add(choice.stayLimit());
                 }
-            });
+            }
             // Obtaining an eVisa/arrival visa refines a visa requirement, not a visa exemption.
             if (!statuses.contains(VisaStatus.VISA_FREE)
                     && (statuses.contains(VisaStatus.E_VISA) || statuses.contains(VisaStatus.VISA_ON_ARRIVAL))) {
                 statuses.remove(VisaStatus.VISA_REQUIRED);
             }
+            if (statuses.equals(Set.of(VisaStatus.E_VISA, VisaStatus.VISA_ON_ARRIVAL))) {
+                // Both are visa routes. Do not arbitrarily advertise just one of them.
+                statuses = new HashSet<>(Set.of(VisaStatus.VISA_REQUIRED));
+            }
             boolean understood = !ambiguous.contains(type) && statuses.size() == 1 && durations.size() <= 1;
             VisaStatus status = understood ? statuses.iterator().next() : VisaStatus.UNKNOWN;
+            if (status == VisaStatus.UNKNOWN && choices.isEmpty() && routeCondition) status = VisaStatus.CONDITIONAL;
+            if (qualifiedExemptions.contains(type) && status == VisaStatus.VISA_FREE) status = VisaStatus.CONDITIONAL;
             String stayLimit = understood && durations.size() == 1 ? durations.iterator().next() : null;
             String conditions = status == VisaStatus.UNKNOWN
                     ? "Otomatik ayrıştırma kesin sonuç üretemedi. Kaynak açıklaması: " + text : text;
+            if (status == VisaStatus.UNKNOWN && choices.isEmpty() && !ambiguous.contains(type)) {
+                conditions = "Kaynak açıklamasında bu pasaport türüne ait bir kural bulunamadı. Kaynak açıklaması: " + text;
+            }
+            if (status == VisaStatus.VISA_FREE && EXTRA_REQUIREMENT.matcher(explanation).find()) {
+                conditions = "Vize muafiyeti ek giriş işlemlerini kaldırmaz. Kaynakta seyahat izni, form veya sigorta bilgisi bulunuyor; "
+                        + "pasaportunuza uygulanan koşulları aşağıdan kontrol edin.\n\n" + conditions;
+            }
+            if (status == VisaStatus.VISA_FREE && stayLimit == null) {
+                conditions = "Kalış süresi kaynakta belirtilmemiştir; bu durum süresiz kalış hakkı vermez.\n\n" + conditions;
+            }
             result.add(new EntryRule(country, type, status, stayLimit, conditions, null, null));
         }
         return result;
     }
 
     private Candidate classify(String sentence, String normalized) {
+        return classify(sentence, normalized, false);
+    }
+
+    private Candidate classify(String sentence, String normalized, boolean general) {
+        // An optional extension is not the initial entitlement. Keep it in conditions.
+        String initial = sentence.replaceAll("(?iu)\\([^)]*(?:uzatıl|uzatil)[^)]*\\)", "");
+        normalized = normalize(initial);
         // These phrases express a bounded stay, not eligibility such as age or an official delegation.
         String eligibility = normalized.replaceAll("\\b(?:asmamak|gecmemek)\\s+(?:sartiyla|kosuluyla|kaydiyla)\\b", "")
                 .replaceAll("\\bkadar olan\\b", "kadar")
                 .replaceAll("\\b(?:gun|ay|yil)\\p{L}*\\s+gecerli\\s+(?=(?:elektronik vize|e-vize))", "")
                 .replaceAll("\\bgecerli\\s+pasaport\\b", "pasaport");
-        int firstPassport = normalized.indexOf("pasaport");
-        if (firstPassport < 0 || !SUBJECT.matcher(normalized.substring(0, firstPassport).strip()).matches()
-                || COMPLEX.matcher(eligibility).find() || NEGATED.matcher(normalized).find()) {
+        String subjectText = normalized.replaceFirst("^pasaport gecerlilik suresi en az \\d+ ay olan\\s+", "")
+                .replaceFirst("^\\d+ \\p{L}+ \\d{4} tarihinden itibaren gecerli olmak uzere\\s+", "");
+        int firstPassport = subjectText.indexOf("pasaport");
+        String subject = firstPassport < 0 ? "" : subjectText.substring(0, firstPassport).strip()
+                .replaceFirst("^.*?seyahat (?:eden|edecek)\\s+", "");
+        eligibility = eligibility.replace("seyahat edecek olan ", "seyahat edecek ");
+        subject = subject.replaceFirst("^olan\\s+", "");
+        boolean complex = COMPLEX.matcher(eligibility).find();
+        boolean explicitCondition = Pattern.compile("\\byas|\\bheyet|\\bgorev|\\bresmi ziyaret|\\bresmi seyahat|"
+                + "\\bikamet izni|\\bvize\\p{L}*\\s+(?:hamili|sahibi|sahip)|\\bbasvuruyla birlikte|\\bon onay|\\bonceden onay|"
+                + "\\bolumlu yanit|\\bdavetiye|\\bsadece|\\byalnizca")
+                .matcher(eligibility).find();
+        // Passport validity is a document requirement, not a restriction on visa exemption.
+        if (normalized.startsWith("pasaport gecerlilik suresi en az ")) {
+            eligibility = eligibility.replaceFirst("^pasaport gecerlilik suresi en az \\d+ ay olan\\s+", "");
+            complex = COMPLEX.matcher(eligibility).find();
+        }
+        if (NEGATED.matcher(normalized).find()) return null;
+        if (complex && explicitCondition) return new Candidate(VisaStatus.CONDITIONAL, null);
+        if ((!general && (firstPassport < 0 || !SUBJECT.matcher(subject).matches())) || complex) {
             return null;
         }
         long freeCount = FREE.matcher(normalized).results().count();
@@ -257,10 +366,8 @@ public class MfaVisaParser {
         boolean obtainable = OBTAIN_VISA.matcher(normalized).find();
         boolean electronic = ELECTRONIC.matcher(normalized).find() && obtainable;
         boolean arrival = ARRIVAL.matcher(normalized).find() && obtainable;
-        if (electronic && arrival) {
-            return null;
-        }
         VisaStatus status = freeCount == 1 ? VisaStatus.VISA_FREE
+                : electronic && arrival ? VisaStatus.VISA_REQUIRED
                 : electronic ? VisaStatus.E_VISA : arrival ? VisaStatus.VISA_ON_ARRIVAL : VisaStatus.VISA_REQUIRED;
         if (freeCount == 1 && (electronic || arrival)) {
             return null;
@@ -270,15 +377,17 @@ public class MfaVisaParser {
         }
         // A visa's validity is not necessarily its permitted stay.
         String stay = status == VisaStatus.VISA_REQUIRED || VISA_VALIDITY.matcher(normalized).find()
-                ? null : stayLimit(sentence);
+                ? null : stayLimit(initial);
         return new Candidate(status, stay);
     }
 
     private boolean transitOnly(String text) {
-        return text.contains("transit") && !NORMAL_ENTRY.matcher(text).find();
+        return text.contains("transit") && (!NORMAL_ENTRY.matcher(text).find()
+                || (text.contains("ucuncu ulke") && !Pattern.compile("\\bgiris|\\bcikis").matcher(text).find()));
     }
 
     private String stayLimit(String sentence) {
+        sentence = sentence.replaceFirst("(?iu),?\\s*(?:bu süre|başvuru üzerine|basvuru uzerine).*uzat[ıi]l.*$", "");
         Matcher duration = DURATION.matcher(sentence);
         int start = -1;
         int end = -1;
@@ -286,7 +395,9 @@ public class MfaVisaParser {
         while (duration.find()) {
             // Document validity is independent of the permitted stay in the destination.
             String following = normalize(sentence.substring(duration.end()));
-            if (following.matches("^gecerli\\s+pasaport.*")) {
+            String preceding = normalize(sentence.substring(0, duration.start()));
+            if (following.matches("^gecerli\\s+pasaport.*")
+                    || (preceding.contains("pasaport gecerlilik suresi") && following.startsWith("olan "))) {
                 continue;
             }
             if (start < 0) {
@@ -304,12 +415,19 @@ public class MfaVisaParser {
 
     private Set<PassportType> passportTypes(String text) {
         Set<PassportType> types = EnumSet.noneOf(PassportType.class);
-        if (text.contains("umuma mahsus")) types.add(PassportType.ORDINARY);
-        if (Pattern.compile("\\bhususi\\b").matcher(text).find()) types.add(PassportType.SPECIAL);
-        if (Pattern.compile("\\bhizmet\\b").matcher(text).find()) types.add(PassportType.SERVICE);
-        if (Pattern.compile("\\bdiplomatik\\b").matcher(text).find()) types.add(PassportType.DIPLOMATIC);
-        if (Pattern.compile("\\bresmi\\s+(?:\\([^)]*\\)\\s*)?pasaport").matcher(text).find()) {
-            types.addAll(EnumSet.of(PassportType.SPECIAL, PassportType.SERVICE, PassportType.DIPLOMATIC));
+        // Match passport subjects, not a later reference to a diplomatic mission,
+        // a service fee, or another unrelated word in the explanation.
+        Matcher groups = Pattern.compile("(?:(?:umuma mahsus|hususi|hizmet|diplomatik|resmi|mahsus|ve|veya)\\b[\\s,()]*)+pasaport")
+                .matcher(text);
+        while (groups.find()) {
+            String group = groups.group();
+            if (group.contains("umuma mahsus")) types.add(PassportType.ORDINARY);
+            if (group.contains("hususi")) types.add(PassportType.SPECIAL);
+            if (group.contains("hizmet")) types.add(PassportType.SERVICE);
+            if (group.contains("diplomatik")) types.add(PassportType.DIPLOMATIC);
+            if (group.contains("resmi")) {
+                types.addAll(EnumSet.of(PassportType.SPECIAL, PassportType.SERVICE, PassportType.DIPLOMATIC));
+            }
         }
         return types;
     }
