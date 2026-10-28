@@ -38,6 +38,20 @@ class TravelCatalogApiTests {
     }
 
     @Test
+    void listsSelectedAdditionalDestinations() throws Exception {
+        mvc.perform(get("/api/countries"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].isoCode", hasItem("SM")))
+                .andExpect(jsonPath("$[*].isoCode", hasItem("VA")))
+                .andExpect(jsonPath("$[*].isoCode", hasItem("GL")))
+                .andExpect(jsonPath("$[*].isoCode", hasItem("PR")))
+                .andExpect(jsonPath("$[*].isoCode", hasItem("GI")));
+        mvc.perform(get("/api/countries/SM/entry-rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4));
+    }
+
+    @Test
     void filtersRulesByPassportAndKeepsUnverifiedDataUnknown() throws Exception {
         mvc.perform(get("/api/entry-rules").param("passportType", "ORDINARY"))
                 .andExpect(status().isOk())
