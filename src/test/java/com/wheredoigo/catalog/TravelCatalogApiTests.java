@@ -9,6 +9,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.emptyOrNullString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,6 +38,20 @@ class TravelCatalogApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].isoCode", hasItem("DE")))
                 .andExpect(jsonPath("$[*].name", hasItem("Almanya")));
+    }
+
+    @Test
+    void exposesTurkishSummariesInCountryListAndNestedEntryRules() throws Exception {
+        mvc.perform(get("/api/countries"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].summary", everyItem(not(emptyOrNullString()))))
+                .andExpect(jsonPath("$[?(@.isoCode == 'DE')].summary", hasItem(containsString("Almanya"))))
+                .andExpect(jsonPath("$[?(@.isoCode == 'TR')].summary", hasItem(containsString("Anadolu"))));
+
+        mvc.perform(get("/api/countries/DE/entry-rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[*].country.summary", everyItem(containsString("Almanya"))));
     }
 
     @Test

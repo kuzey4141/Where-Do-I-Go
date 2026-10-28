@@ -41,6 +41,18 @@ class TravelCatalogDatabaseTests {
     }
 
     @Test
+    void rejectsBlankCountrySummaries() {
+        assertThrows(DataIntegrityViolationException.class, () ->
+                jdbc.update("UPDATE countries SET summary = '   ' WHERE iso_code = 'DE'"));
+    }
+
+    @Test
+    void rejectsNullCountrySummaries() {
+        assertThrows(DataIntegrityViolationException.class, () ->
+                jdbc.update("UPDATE countries SET summary = NULL WHERE iso_code = 'DE'"));
+    }
+
+    @Test
     void apiReadsPersistedRulesAndFiltersTheirStatus() throws Exception {
         // Synthetic test data; this is not an actual visa rule for Germany.
         jdbc.update("""

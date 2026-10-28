@@ -19,14 +19,15 @@ public class JdbcTravelCatalogRepository implements TravelCatalogRepository {
 
     @Override
     public List<Country> countries() {
-        return jdbcTemplate.query("SELECT iso_code, name FROM countries ORDER BY iso_code",
-                (row, index) -> new Country(row.getString("iso_code"), row.getString("name")));
+        return jdbcTemplate.query("SELECT iso_code, name, summary FROM countries ORDER BY iso_code",
+                (row, index) -> new Country(row.getString("iso_code"), row.getString("name"),
+                        row.getString("summary")));
     }
 
     @Override
     public List<EntryRule> entryRules() {
         return jdbcTemplate.query("""
-                SELECT c.iso_code, c.name, p.code AS passport_type,
+                SELECT c.iso_code, c.name, c.summary, p.code AS passport_type,
                        r.visa_status, r.stay_limit, r.conditions, r.source_url, r.verified_at
                 FROM countries c
                 CROSS JOIN passport_types p
@@ -35,7 +36,8 @@ public class JdbcTravelCatalogRepository implements TravelCatalogRepository {
                 WHERE c.iso_code <> 'TR'
                 ORDER BY c.iso_code, p.display_order
                 """, (row, index) -> {
-                    Country country = new Country(row.getString("iso_code"), row.getString("name"));
+                    Country country = new Country(row.getString("iso_code"), row.getString("name"),
+                            row.getString("summary"));
                     PassportType passportType = PassportType.valueOf(row.getString("passport_type"));
                     String visaStatus = row.getString("visa_status");
                     if (visaStatus == null) {

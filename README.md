@@ -68,13 +68,14 @@ Flyway creates and versions the schema automatically when the application starts
 
 - `V1__create_travel_catalog.sql`: Creates tables, constraints, indexes, and the four passport types.
 - `V2__seed_countries.java`: Inserts the JDK ISO country and territory catalog with Turkish names once.
+- `V3__add_country_summaries.sql`: Adds and populates short Turkish country summaries. It only updates existing countries and does not restore removed destinations.
 
 Add a new versioned migration for later schema changes instead of modifying migrations
 that have already been applied. The application does not recreate tables on startup.
 
 | Table | Contents |
 |---|---|
-| `countries` | ISO alpha-2 code and Turkish name |
+| `countries` | ISO alpha-2 code, Turkish name, and a short Turkish `summary` |
 | `passport_types` | Passport code, Turkish name, color, and display order |
 | `entry_rules` | Country/passport rule, visa status, stay conditions, source URL, fetch and verification dates, and record timestamps |
 
@@ -177,7 +178,7 @@ can be configured with `sources.mfa.minimum-countries` for controlled tests.
 | Request | Response |
 |---|---|
 | `GET /api/passport-types` | Four Turkish passport types with their names and colors |
-| `GET /api/countries` | Countries and territories with ISO 3166-1 alpha-2 codes |
+| `GET /api/countries` | Countries and territories with ISO codes, Turkish names, and short Turkish summaries |
 | `GET /api/entry-rules?passportType=ORDINARY` | Entry rules for the selected passport type |
 | `GET /api/entry-rules?passportType=ORDINARY&visaStatus=VISA_FREE` | Entry rules filtered by passport type and visa status |
 | `GET /api/countries/DE/entry-rules` | Entry rules for all four passport types for a destination |
@@ -217,7 +218,7 @@ Each entry rule contains the following fields:
 
 | Field | Description |
 |---|---|
-| `country` | Destination object containing `isoCode` and a Turkish `name` |
+| `country` | Destination object containing `isoCode`, a Turkish `name`, and a short Turkish `summary` |
 | `passportType` | Passport type code, such as `ORDINARY` |
 | `visaStatus` | Parsed entry requirement classification, or `UNKNOWN` |
 | `stayLimit` | Extracted stay duration and any applicable period limit, if understood |
@@ -226,6 +227,10 @@ Each entry rule contains the following fields:
 | `verifiedAt` | Automatic rule validation date; absent for unknown rules |
 
 `GET /api/countries/DE/entry-rules` returns four records, one per passport type.
+
+Country summaries are one or two sentences of geographic and cultural context.
+Use **Ülke hakkında** as the user-facing heading for `summary`. The same field
+is included in both the country list and the nested country object in entry rules.
 
 ## Architecture
 
