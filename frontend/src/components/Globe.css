@@ -1,0 +1,91 @@
+.globe-renderer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 350px;
+  isolation: isolate;
+}
+
+.earth-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  opacity: 1;
+  transition: opacity 700ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.earth-canvas:focus-visible {
+  outline: 1px solid rgba(255, 83, 88, 0.65);
+  outline-offset: -16px;
+  border-radius: 50%;
+}
+
+.earth-canvas.is-dragging {
+  cursor: grabbing !important;
+}
+
+.globe-renderer--loading .earth-canvas {
+  opacity: 0.28;
+}
+
+.globe-renderer--unavailable .earth-canvas {
+  opacity: 0.06;
+}
+
+.globe-message {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  color: #949492;
+  font-size: 12px;
+  letter-spacing: 0.035em;
+  text-align: center;
+  pointer-events: none;
+  padding: 28px;
+}
+
+.globe-message--error strong {
+  color: #d1d0cc;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.globe-message--error > span:last-child {
+  max-width: 240px;
+  line-height: 1.7;
+}
+
+.globe-loader {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #363638;
+  border-top-color: #d34c54;
+  border-radius: 50%;
+  animation: globe-loading-spin 1.1s linear infinite;
+}
+
+.globe-fallback-orbit {
+  width: 115px;
+  height: 115px;
+  border: 1px solid #373436;
+  border-radius: 50%;
+  margin-bottom: 8px;
+  background: repeating-linear-gradient(0deg, transparent 0 21px, #ffffff06 21px 22px);
+}
+
+@keyframes globe-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .earth-canvas { transition: none; }
+  .globe-loader { animation: none; }
+}

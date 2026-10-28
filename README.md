@@ -1,11 +1,12 @@
 # Where Do I Go
 
-A REST API built with Java 21 and Spring Boot for exploring entry requirements for Turkish passport holders.
+A globe-based travel explorer for Turkish passport holders, with a React/Three.js interface and a Java 21 / Spring Boot API.
 
 ## Requirements
 
 - JDK 21 or later
-- PostgreSQL 17, or Docker with the Compose plugin to run the included database service
+- PostgreSQL 17
+- Node.js 24 LTS and npm for building or developing the interface
 - An internet connection to download dependencies on the first run
 
 The project includes Maven Wrapper, so a separate Maven installation is not required.
@@ -20,13 +21,13 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 If you copied the template, replace its `DB_PASSWORD` placeholder with a local password
 before starting the database. An existing generated `.env` is ready to use.
-Both Docker Compose and Spring Boot read this file from the project directory.
+Spring Boot reads this file from the project directory.
 Environment variables override the application values from `.env`.
 
-Start PostgreSQL with Docker:
+Start the locally installed PostgreSQL on this Windows setup:
 
 ```powershell
-docker compose up -d --wait postgres
+.\scripts\local-db.ps1 Start
 ```
 
 Then start the application from the project directory.
@@ -43,11 +44,26 @@ Linux / macOS:
 ./mvnw spring-boot:run
 ```
 
-The application runs at `http://localhost:8080` by default.
-The root path `/` has no endpoint and returns `404`.
+The API runs at `http://localhost:8080` by default. To develop the interface,
+open another terminal in the project directory:
 
-If PostgreSQL is already installed, create the database and login role manually
-and set the matching credentials in `.env`. Docker is optional in this case.
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Vite forwards `/api` requests to the Java server.
+The interface reads the existing country, summary, passport and entry-rule APIs;
+there is no separate mock catalog in the application.
+
+Drag the globe to rotate it, use the wheel or the +/− controls to zoom, and hover
+over a country for a summary and animated red border. Selecting a country moves
+the globe left and opens its passport-specific information. The search field also
+supports small countries. Country selection is limited to the API catalog.
+
+For another PostgreSQL installation, create the database and login role manually
+and set the matching credentials in `.env`. Docker is not required.
 
 ## Database configuration
 
@@ -59,10 +75,8 @@ and set the matching credentials in `.env`. Docker is optional in this case.
 | `DB_PORT` | `5432` | Local PostgreSQL port |
 | `DB_URL` | Built from `DB_PORT` and `DB_NAME` on localhost | Optional full JDBC URL for an existing or remote database |
 
-The Compose service is bound to localhost and stores data in a named Docker volume.
-`docker compose stop postgres` stops the service while preserving its data.
-PostgreSQL's Docker initialization credentials apply when the volume is first created;
-editing `.env` does not change credentials in an existing database.
+The local helper supports `Start`, `Stop`, `Inspect` and `Shell` actions.
+Editing `.env` does not change credentials in an existing PostgreSQL database.
 
 Flyway creates and versions the schema automatically when the application starts:
 
@@ -93,13 +107,40 @@ H2 tests do not replace integration testing against a running PostgreSQL instanc
 
 ```powershell
 .\mvnw.cmd test
-.\mvnw.cmd clean package
+```
+
+The interface has six browser tests covering globe hover, selection, dragging,
+zoom, passport changes, error recovery, mobile layout and keyboard interaction.
+They use the installed Microsoft Edge browser and synthetic API fixtures:
+
+```powershell
+cd frontend
+npm run test:e2e
+```
+
+To package the interface and API into one runnable JAR, run from the project root:
+
+```powershell
+.\mvnw.cmd clean compile
+cd frontend
+npm ci
+npm run build:backend
+cd ..
+.\mvnw.cmd -DskipTests package
 java -jar target/where-do-i-go-0.0.1-SNAPSHOT.jar
 ```
+
+Open `http://localhost:8080`. `build:backend` writes static assets into
+`target/classes/static`; run it after `clean`, since `clean` removes that directory.
+A backend-only build does not include the interface and returns `404` at `/`.
+`npm run build` produces a standalone interface build in `frontend/dist` instead.
+Fonts and globe geometry are served locally; geographic sources and attribution
+are documented in `frontend/public/data/README.md`.
 
 ## Project structure
 
 - `pom.xml`: Project metadata, dependencies, and build configuration.
+- `frontend/`: React/Three.js interface, Vite configuration, local map assets and browser tests.
 - `src/main/java/com/wheredoigo/WhereDoIGoApplication.java`: Application entry point.
 - `src/main/resources/application.properties`: Application configuration.
 - `src/main/resources/db/migration/`: Versioned SQL migrations.
