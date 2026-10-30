@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+target
+frontend
+docs
+scripts
+.vscode
+.idea
+compose.yaml

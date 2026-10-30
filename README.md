@@ -137,6 +137,63 @@ A backend-only build does not include the interface and returns `404` at `/`.
 Fonts and globe geometry are served locally; geographic sources and attribution
 are documented in `frontend/public/data/README.md`.
 
+## Deploy the Java API on Render Free
+
+The root `Dockerfile` builds the Java 21 API and runs it as a non-root user.
+Render builds the image remotely; Docker Desktop is not required locally.
+This image contains only the API. Publish `frontend` separately on Vercel or
+Cloudflare and forward its `/api` requests to the API's HTTPS address.
+
+Use the following settings for a Render **Web Service**:
+
+| Setting | Value |
+|---|---|
+| Branch | The branch containing the Dockerfile |
+| Language / Runtime | `Docker` |
+| Root Directory | Leave empty (repository root) |
+| Dockerfile Path | `./Dockerfile` |
+| Docker Command | Leave empty (use the image entrypoint) |
+| Instance Type | `Free` ($0/month) |
+| Health Check Path | `/api/health` |
+
+The Docker runtime replaces the Node build/start command fields. Do not use
+`yarn` or `yarn start`. `PORT`, supplied by Render, sets the HTTP port; local
+startup still defaults to 8080. The runtime limits the connection pool to two
+connections and releases idle connections so an external database can suspend.
+
+Set these **runtime environment variables** using the external PostgreSQL
+provider's connection details, not the local `.env` file:
+
+| Key | Value |
+|---|---|
+| `DB_URL` | `jdbc:postgresql://<host>:<port>/<database>?sslmode=require` |
+| `DB_USER` | The hosted database username |
+| `DB_PASSWORD` | The hosted database password |
+
+Never commit credentials. `.dockerignore` excludes local environment files and
+generated files from the image build. Leave `sources.mfa.import-on-startup`
+disabled; normal API startup must not fetch and overwrite the catalog.
+
+Before the first public launch, restore a backup of the existing PostgreSQL
+database (including Flyway history) into the hosted database. A fresh database
+runs the ISO seed migration and does not contain the manually curated catalog
+and imported entry rules. Do not expose that empty catalog as the production data.
+
+`GET /api/health` reports HTTP process liveness only and does not query the
+database or fetch source pages. Use it for an external monitor; if the monitor
+is also used to reduce idle sleeping, send requests less than 15 minutes apart
+(for example, every 10 minutes). This does not guarantee uptime: Render may
+restart or suspend Free services, and delayed monitoring requests can allow sleep.
+
+Render currently includes 750 Free instance hours per workspace per month,
+shared across Free web services. One continuously running service uses at most
+744 hours in a 31-day month. With no payment method, Render documents suspension
+when outbound bandwidth is exhausted and blocking new builds when build minutes
+are exhausted. Keep both the workspace and instance on their free plans; do not
+enable paid resources. Check the current [Render Free conditions](https://render.com/docs/free)
+before deployment. Render's free PostgreSQL expires after 30 days; select a
+separate database plan only after verifying its free limits and overage behavior.
+
 ## Project structure
 
 - `pom.xml`: Project metadata, dependencies, and build configuration.
