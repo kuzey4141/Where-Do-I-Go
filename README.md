@@ -194,6 +194,23 @@ enable paid resources. Check the current [Render Free conditions](https://render
 before deployment. Render's free PostgreSQL expires after 30 days; select a
 separate database plan only after verifying its free limits and overage behavior.
 
+## Deploy the interface on Vercel
+
+Import the same GitHub repository with **Root Directory** set to `frontend` and
+the **Vite** preset. Use `npm run build` as the build command and `dist` as the
+output directory. No database environment variables belong in the frontend.
+
+`frontend/vercel.json` forwards `/api/:path*` to
+`https://where-do-i-go.onrender.com/api/:path*`. The browser continues to request
+`/api/countries`, `/api/passport-types`, and the other existing API routes from
+the frontend origin; Vercel proxies them to the Java backend. Local development
+continues to use the Vite proxy to `localhost:8080`.
+
+After deploying the frontend, open `/api/health` on its Vercel domain to check
+the forwarding. It should return `{"status":"UP"}`. Then check `/api/countries`
+and select a country in the globe to verify the catalog and passport rules.
+If the backend URL changes, update the rewrite destination and redeploy Vercel.
+
 ## Project structure
 
 - `pom.xml`: Project metadata, dependencies, and build configuration.
