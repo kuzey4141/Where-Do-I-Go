@@ -116,6 +116,56 @@ test('a failed rules request is recoverable without losing the selected country'
   await expect(page.locator('.country-heading h1')).toHaveText('Almanya')
 })
 
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`conditions disclosure follows rendered lines and resets on selection (${viewport.width}px)`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await openApp(page)
+    const longText = 'Yalnızca test için yazılan uzun koşul açıklaması. '.repeat(30)
+    const fittingText = 'Geçerli pasaport ve seyahat belgeleri gerekir. Başvurunun seyahatten önce tamamlanması önerilir. Güncel koşullar ve gerekli belgeler hakkında bilgi almak için ilgili ülkenin resmî kaynağını inceleyebilirsin.'
+    const multilineText = 'Örnek bir.\nÖrnek iki.\nÖrnek üç.\nÖrnek dört.\nÖrnek beş.\nÖrnek altı.'
+    expect(fittingText.length).toBeGreaterThan(190)
+    expect(multilineText.length).toBeLessThan(190)
+    await page.route('**/api/countries/DE/entry-rules', (route) => route.fulfill({
+      json: rulesFor('DE').map((rule) => ({
+        ...rule,
+        conditions: rule.passportType === 'SPECIAL' ? fittingText
+          : rule.passportType === 'SERVICE' ? multilineText : longText,
+      })),
+    }))
+    await selectCountry(page, 'Almanya')
+    const paragraph = page.locator('.conditions p')
+    const toggle = page.locator('.disclosure-button')
+    const collapsedHeight = await paragraph.evaluate((element) => element.clientHeight)
+    const lineHeight = await paragraph.evaluate((element) => parseFloat(getComputedStyle(element).lineHeight))
+    expect(collapsedHeight).toBeLessThanOrEqual(lineHeight * 4 + 1)
+    await expect(toggle).toHaveText('Devamını göster')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await toggle.scrollIntoViewIfNeeded()
+    const before = await page.evaluate(() => ({ window: scrollY, panel: document.querySelector('.panel-scroll').scrollTop }))
+    await toggle.click()
+    await expect(toggle).toHaveText('Daha az göster')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(await paragraph.evaluate((element) => element.clientHeight)).toBeGreaterThan(collapsedHeight)
+    expect(await page.evaluate(() => ({ window: scrollY, panel: document.querySelector('.panel-scroll').scrollTop }))).toEqual(before)
+    await toggle.click()
+    await expect(toggle).toHaveText('Devamını göster')
+    expect(await paragraph.evaluate((element) => element.clientHeight)).toBe(collapsedHeight)
+
+    await toggle.click()
+    await page.getByRole('button', { name: 'Yeşil pasaport', exact: true }).click()
+    await expect(paragraph).toHaveText(fittingText)
+    await expect(toggle).toHaveCount(0)
+    await page.getByRole('button', { name: 'Gri pasaport', exact: true }).click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await selectCountry(page, 'Japonya')
+    await expect(toggle).toHaveCount(0)
+    await selectCountry(page, 'Almanya')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+}
+
 test('mobile selection keeps the header, search and panel readable without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openApp(page)

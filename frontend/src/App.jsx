@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, Check, CheckCircle2,
   ChevronDown, Compass, Globe2, Info, Loader2, Minus, MousePointer2,
@@ -124,9 +124,38 @@ function HowItWorks({ open, onClose }) {
   </dialog>
 }
 
-function CountryPanel({ country, visible, passport, data, onClose, onRetry }) {
+function EntryConditions({ text }) {
   const [expanded, setExpanded] = useState(false)
-  useEffect(() => setExpanded(false), [country?.isoCode, passport.code])
+  const [overflows, setOverflows] = useState(false)
+  const paragraph = useRef(null)
+  const textId = useId()
+
+  useLayoutEffect(() => {
+    const element = paragraph.current
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight)
+      setOverflows(element.scrollHeight > lineHeight * 4 + 1)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    document.fonts.ready.then(measure)
+    return () => { active = false; observer.disconnect() }
+  }, [text])
+
+  return <div className="conditions">
+    <h2>Koşullar ve notlar</h2>
+    <p ref={paragraph} id={textId} className={expanded ? '' : 'is-clamped'}>{text}</p>
+    {overflows && <button className="disclosure-button" type="button"
+      onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={textId}>
+      {expanded ? 'Daha az göster' : 'Devamını göster'} <ChevronDown size={13} className={expanded ? 'is-rotated' : ''} />
+    </button>}
+  </div>
+}
+
+function CountryPanel({ country, visible, passport, data, onClose, onRetry }) {
   if (!country) return <aside className="country-panel" aria-hidden="true" />
   const domestic = country.isoCode === 'TR'
   const current = data.countryCode === country.isoCode
@@ -169,13 +198,7 @@ function CountryPanel({ country, visible, passport, data, onClose, onRetry }) {
               <p className={'stay-value' + ((stay?.length || 0) > 60 ? ' is-long' : '')}>{stay || 'Belirtilmemiş'}</p>
               {!stay && <span className="stay-note">Süresiz kalış anlamına gelmez.</span>}
             </div>
-            {rule?.conditions && <div className="conditions">
-              <h2>Koşullar ve notlar</h2>
-              <p className={expanded ? '' : 'is-clamped'}>{rule.conditions}</p>
-              {rule.conditions.length > 190 && <button className="disclosure-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
-                {expanded ? 'Daha az göster' : 'Tüm koşulları oku'} <ChevronDown size={13} className={expanded ? 'is-rotated' : ''} />
-              </button>}
-            </div>}
+            {rule?.conditions && <EntryConditions key={country.isoCode + ':' + passport.code} text={rule.conditions} />}
             <div className="source-row">
               {source ? <a href={source} target="_blank" rel="noopener noreferrer">Resmî kaynağı aç <ArrowUpRight size={15} /></a> : <span>Kaynak bilgisi henüz eklenmemiş.</span>}
               {date && <span title="Kaynağın işlendiği tarih">Veri tarihi · {date}</span>}
