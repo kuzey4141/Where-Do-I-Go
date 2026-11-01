@@ -1,0 +1,29 @@
+name: Backend ping
+
+on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: backend-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    # Standard hosted runners are free in public repositories. Skip forks
+    # and private repositories before allocating a runner.
+    if: ${{ github.repository == 'kuzey4141/Where-Do-I-Go' && github.event.repository.visibility == 'public' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check backend health
+        shell: bash
+        run: |
+          response=$(curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 90 \
+            https://where-do-i-go.onrender.com/api/health)
+          printf '%s\n' "$response" | jq --exit-status '.status == "UP"' > /dev/null
+          echo "Backend is UP"

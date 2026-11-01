@@ -185,6 +185,23 @@ is also used to reduce idle sleeping, send requests less than 15 minutes apart
 (for example, every 10 minutes). This does not guarantee uptime: Render may
 restart or suspend Free services, and delayed monitoring requests can allow sleep.
 
+`.github/workflows/backend-ping.yml` sends this request every 10 minutes from
+GitHub Actions (at minutes 7, 17, 27, 37, 47 and 57, avoiding the hour boundary).
+Push the workflow to the default branch to enable the schedule. To verify it,
+open **Actions > Backend ping > Run workflow** on GitHub. Each run has a
+90-second request timeout and checks that the response contains `status: UP`.
+It only calls the liveness endpoint, so it does not wake the database.
+
+The job runs only in the public `kuzey4141/Where-Do-I-Go` repository on a
+standard GitHub-hosted Linux runner; private repositories and forks are skipped.
+It requires no secrets, repository checkout, artifacts or paid services.
+Standard hosted runners are [free for public repositories](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+GitHub can delay or drop scheduled runs and automatically disables public
+repository schedules after 60 days without repository activity. Check the
+[schedule limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+and re-enable the workflow in Actions if it becomes inactive. This reduces idle
+sleeping but does not guarantee an always-on backend.
+
 Render currently includes 750 Free instance hours per workspace per month,
 shared across Free web services. One continuously running service uses at most
 744 hours in a 31-day month. With no payment method, Render documents suspension
